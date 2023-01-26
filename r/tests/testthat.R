@@ -27,4 +27,12 @@ if (verbose_test_output) {
 } else {
   arrow_reporter <- check_reporter()
 }
-test_check("arrow", reporter = arrow_reporter)
+
+# Tried:
+# filter = "^Array" (no leaks)
+# filter = "^dataset" (no leaks)
+# filter = "^dplyr" (leaks!)
+# filter = "^dplyr-[g-u]" (leaks!)
+# filter = "^dplyr-[s-u]" (leaks!)
+# filter = "^dplyr-summarize" (leaks!)
+test_check("arrow", reporter = arrow_reporter, filter = "^dplyr-summarize")
