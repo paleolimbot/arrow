@@ -44,6 +44,10 @@
 }
 
 .deserialize_arrow_r_metadata <- function(x) {
+  if (!option_use_unsafe_metadata_restore()) {
+    return(NULL)
+  }
+
   tryCatch(
     expr = {
       out <- unserialize(charToRaw(x))

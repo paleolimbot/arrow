@@ -152,7 +152,9 @@ s3_finalizer <- new.env(parent = emptyenv())
   SetEnableSignalStopSource(TRUE)
 
   # Register extension types that we use internally
-  reregister_extension_type(vctrs_extension_type(vctrs::unspecified()))
+  if (option_use_unsafe_metadata_restore()) {
+    reregister_extension_type(vctrs_extension_type(vctrs::unspecified()))
+  }
 
   # Registers a callback to run at session exit
   # This can't be done in .onUnload or .onDetach because those hooks are
@@ -261,4 +263,9 @@ option_use_threads <- function() {
 
 option_compress_metadata <- function() {
   !is_false(getOption("arrow.compress_metadata"))
+}
+
+option_use_unsafe_metadata_restore <- function() {
+  isTRUE(getOption("arrow.use_unsafe_metadata_restore", FALSE)) ||
+    identical(Sys.getenv("R_ARROW_USE_UNSAFE_METADATA_RESTORE"), "true")
 }
