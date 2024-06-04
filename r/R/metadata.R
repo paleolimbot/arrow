@@ -46,11 +46,11 @@
 .deserialize_arrow_r_metadata <- function(x) {
   tryCatch(
     expr = {
-      out <- unserialize(charToRaw(x))
+      out <- safer_unserialize(charToRaw(x))
 
       # if this is still raw, try decompressing
       if (is.raw(out)) {
-        out <- unserialize(memDecompress(out, type = "gzip"))
+        out <- safer_unserialize(memDecompress(out, type = "gzip"))
       }
       out
     },
@@ -231,3 +231,40 @@ get_r_metadata_from_old_schema <- function(new_schema, old_schema) {
   }
   r_meta
 }
+
+safer_unserialize <- function(x) {
+  clean_deserialized(unserialize(x))
+}
+
+# Applies some heuristics to minimize the chance that non-standard object types
+# that don't roundtrip properly (e.g., external pointers, functions) aren't
+# serialized/unserialized in the JSON ptype.
+clean_deserialized <- function(x) {
+  whitelist <- c(
+    "character", "double", "integer",
+    "logical", "complex", "list", "raw",
+    "NULL"
+  )
+
+  if (!(typeof(x) %in% whitelist)) {
+    stop(
+      sprintf(
+        "Can't unserialize metadata containing object of type %s",
+        typeof(x)
+      )
+    )
+  }
+
+  attrs <- attributes(x)
+  if (!is.null(x)) {
+    attrs <- lapply(attrs, clean_deserialized)
+  }
+
+  if (is.list(x)) {
+    x <- lapply(unclass(x), clean_deserialized)
+  }
+
+  attributes(x) <- attrs
+  x
+}
+
