@@ -238,8 +238,7 @@ safer_unserialize <- function(x) {
 }
 
 # Applies some heuristics to minimize the chance that non-standard object types
-# that don't roundtrip properly (e.g., external pointers, functions) aren't
-# serialized/unserialized in the JSON ptype.
+# are applied as attributes to the columns of a data frame
 clean_deserialized <- function(x) {
   whitelist <- c(
     "character", "double", "integer",
