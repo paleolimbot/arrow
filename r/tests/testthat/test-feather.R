@@ -299,6 +299,8 @@ unlink(feather_file)
 ft_file <- test_path("golden-files/data-arrow_2.0.0_lz4.feather")
 
 test_that("Error messages are shown when the compression algorithm lz4 is not found", {
+  withr::local_options(list(arrow.enable_legacy_metadata = TRUE))
+
   msg <- paste0(
     ".*",
     "you will need to reinstall arrow with additional features enabled.\nSet one of ",

@@ -262,3 +262,7 @@ option_use_threads <- function() {
 option_compress_metadata <- function() {
   !is_false(getOption("arrow.compress_metadata"))
 }
+
+option_enable_legacy_metadata <- function() {
+  isTRUE(getOption("arrow.enable_legacy_metadata", FALSE))
+}

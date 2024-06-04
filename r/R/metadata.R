@@ -245,8 +245,14 @@ unserialize_r_object <- function(x) {
     print(x)
   }
 
-  if (!identical(x[[1]], as.raw(0x7b))) {
-    unserialize(x)
+  # First character of an ASCII .rds stream is A
+  if (identical(x[[1]], charToRaw("A"))) {
+    if (option_enable_legacy_metadata()) {
+      unserialize(x)
+    } else {
+      warn("Use options(arrow.enable_legacy_metadata = TRUE) to enable R metadata restoration")
+      NULL
+    }
   } else {
     jsonlite::unserializeJSON(rawToChar(x))
   }

@@ -100,8 +100,20 @@ test_that("Garbage R metadata doesn't break things", {
   )
   # serialize data like .serialize_arrow_r_metadata does, but don't call that
   # directly since it checks to ensure that the data is a list
+
+  # Check garbage legacy metadata
+  withr::with_options(list(arrow.enable_legacy_metadata = TRUE), {
+    tab <- Table$create(example_data[1:6])
+    tab$metadata$r <- rawToChar(serialize("garbage", NULL, ascii = TRUE))
+    expect_warning(
+      as.data.frame(tab),
+      "Invalid metadata$r",
+      fixed = TRUE
+    )
+  })
+
   tab <- Table$create(example_data[1:6])
-  tab$metadata$r <- rawToChar(serialize("garbage", NULL, ascii = TRUE))
+  tab$metadata$r <- rawToChar(serialize_r_object("garbage"))
   expect_warning(
     as.data.frame(tab),
     "Invalid metadata$r",
