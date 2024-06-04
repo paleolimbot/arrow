@@ -233,9 +233,21 @@ get_r_metadata_from_old_schema <- function(new_schema, old_schema) {
 }
 
 serialize_r_object <- function(x) {
-  serialize(x, NULL, ascii = TRUE)
+  charToRaw(jsonlite::serializeJSON(x, digits = 16))
 }
 
 unserialize_r_object <- function(x) {
-  unserialize(x)
+  if (is.string(x)) {
+    x <- charToRaw(x)
+  }
+
+  if (!is.raw(x)) {
+    print(x)
+  }
+
+  if (!identical(x[[1]], as.raw(0x7b))) {
+    unserialize(x)
+  } else {
+    jsonlite::unserializeJSON(rawToChar(x))
+  }
 }
