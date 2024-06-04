@@ -30,11 +30,11 @@
     }
   }
 
-  out <- serialize(x, NULL, ascii = TRUE)
+  out <- serialize_r_object(x)
 
   # if the metadata is over 100 kB, compress
   if (option_compress_metadata() && object.size(out) > 100000) {
-    out_comp <- serialize(memCompress(out, type = "gzip"), NULL, ascii = TRUE)
+    out_comp <- serialize_r_object(memCompress(out, type = "gzip"))
 
     # but ensure that the compression+serialization is effective.
     if (object.size(out) > object.size(out_comp)) out <- out_comp
@@ -46,11 +46,11 @@
 .deserialize_arrow_r_metadata <- function(x) {
   tryCatch(
     expr = {
-      out <- unserialize(charToRaw(x))
+      out <- unserialize_r_object(charToRaw(x))
 
       # if this is still raw, try decompressing
       if (is.raw(out)) {
-        out <- unserialize(memDecompress(out, type = "gzip"))
+        out <- unserialize_r_object(memDecompress(out, type = "gzip"))
       }
       out
     },
@@ -230,4 +230,12 @@ get_r_metadata_from_old_schema <- function(new_schema, old_schema) {
     r_meta$columns <- r_meta$columns[keep]
   }
   r_meta
+}
+
+serialize_r_object <- function(x) {
+  serialize(x, NULL, ascii = TRUE)
+}
+
+unserialize_r_object <- function(x) {
+  unserialize(x)
 }
