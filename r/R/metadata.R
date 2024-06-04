@@ -233,7 +233,8 @@ get_r_metadata_from_old_schema <- function(new_schema, old_schema) {
 }
 
 safer_unserialize <- function(x) {
-  clean_deserialized(unserialize(x))
+  raw <- list(unserialize(x))
+  clean_deserialized(raw[[1]])
 }
 
 # Applies some heuristics to minimize the chance that non-standard object types
