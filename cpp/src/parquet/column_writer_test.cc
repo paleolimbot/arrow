@@ -407,6 +407,13 @@ class TestPrimitiveWriter : public PrimitiveTypedTest<TestType> {
     return ColumnChunkMetaData::Make(metadata_->contents(), this->descr_);
   }
 
+  EncodedStatistics metadata_encoded_stats() {
+    ApplicationVersion app_version(this->writer_properties_->created_by());
+    auto metadata_accessor = ColumnChunkMetaData::Make(
+        metadata_->contents(), this->descr_, default_reader_properties(), &app_version);
+    return metadata_accessor->statistics()->Encode();
+  }
+
  protected:
   int64_t values_read_;
   // Keep the reader alive as for ByteArray the lifetime of the ByteArray
@@ -1901,6 +1908,16 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
     // std::set<Encoding::type> metadata_encodings_set{metadata_encodings.begin(),
     //                                                 metadata_encodings.end()};
     // EXPECT_EQ(expected_encodings, metadata_encodings_set);
+
+    auto encoded_statistics = metadata_encoded_stats();
+    EXPECT_TRUE(encoded_statistics.has_geometry_statistics);
+    auto geometry_statistics = encoded_statistics.geometry_statistics();
+    EXPECT_EQ(1, geometry_statistics.geometry_types.size());
+    EXPECT_EQ(1, geometry_statistics.geometry_types[0]);
+    EXPECT_DOUBLE_EQ(0, geometry_statistics.xmin);
+    EXPECT_DOUBLE_EQ(1, geometry_statistics.ymin);
+    EXPECT_DOUBLE_EQ(99, geometry_statistics.xmax);
+    EXPECT_DOUBLE_EQ(100, geometry_statistics.ymax);
   }
 };
 
