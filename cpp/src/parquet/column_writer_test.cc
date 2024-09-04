@@ -1834,7 +1834,9 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
     for (int i = 0; i < num_columns; ++i) {
       std::string name = TestColumnName(i);
       std::shared_ptr<const LogicalType> logical_type = GeometryLogicalType::Make(
-          CRS, LogicalType::GeometryEdges::PLANAR, LogicalType::GeometryEncoding::WKB, METADATA);
+          CRS, LogicalType::GeometryEdges::PLANAR,
+          LogicalType::GeometryEncoding::WKB,
+          METADATA);
       fields.push_back(schema::PrimitiveNode::Make(name, repetition, logical_type,
                                                    ByteArrayType::type_num));
     }

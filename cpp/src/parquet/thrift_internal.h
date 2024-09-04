@@ -360,7 +360,8 @@ static inline format::Statistics ToThrift(const EncodedStatistics& stats) {
   if (stats.has_geometry_statistics) {
     const EncodedGeometryStatistics& encoded_geometry_stats = stats.geometry_statistics();
     format::GeometryStatistics geometry_statistics;
-    std::vector<int32_t> geometry_types(encoded_geometry_stats.geometry_types.begin(), encoded_geometry_stats.geometry_types.end());
+    std::vector<int32_t> geometry_types(encoded_geometry_stats.geometry_types.begin(),
+                                        encoded_geometry_stats.geometry_types.end());
     geometry_statistics.__set_geometry_types(geometry_types);
     format::BoundingBox bbox;
     bbox.__set_xmin(encoded_geometry_stats.xmin);
@@ -373,8 +374,8 @@ static inline format::Statistics ToThrift(const EncodedStatistics& stats) {
     }
     if (encoded_geometry_stats.has_m()) {
       bbox.__set_mmin(encoded_geometry_stats.mmin);
-      bbox.__set_mmax(encoded_geometry_stats.mmax);    
-    }   
+      bbox.__set_mmax(encoded_geometry_stats.mmax);
+    }
     geometry_statistics.__set_bbox(bbox);
     statistics.__set_geometry_stats(geometry_statistics);
   }
