@@ -407,10 +407,14 @@ class TestPrimitiveWriter : public PrimitiveTypedTest<TestType> {
   }
 
   EncodedStatistics metadata_encoded_stats() {
+    return metadata_stats()->Encode();
+  }
+
+  std::shared_ptr<Statistics> metadata_stats() {
     ApplicationVersion app_version(this->writer_properties_->created_by());
     auto metadata_accessor = ColumnChunkMetaData::Make(
         metadata_->contents(), this->descr_, default_reader_properties(), &app_version);
-    return metadata_accessor->statistics()->Encode();
+    return metadata_accessor->statistics();
   }
 
  protected:
@@ -1880,8 +1884,8 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
       double x = 0;
       double y = 0;
       EXPECT_TRUE(GetWKBPointCoordinate(value, &x, &y));
-      double expected_x = i;
-      double expected_y = i + 1;
+      auto expected_x = static_cast<double>(i);
+      auto expected_y = static_cast<double>(i + 1);
       EXPECT_DOUBLE_EQ(expected_x, x);
       EXPECT_DOUBLE_EQ(expected_y, y);
     }
@@ -1903,6 +1907,18 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
     EXPECT_DOUBLE_EQ(1, geometry_statistics.ymin);
     EXPECT_DOUBLE_EQ(99, geometry_statistics.xmax);
     EXPECT_DOUBLE_EQ(100, geometry_statistics.ymax);
+    std::shared_ptr<Statistics> statistics = metadata_stats();
+    EXPECT_TRUE(statistics->HasGeometryStatistics());
+    const GeometryStatistics* geometry_statistics = statistics->geometry_statistics();
+    std::vector<int32_t> geometry_types = geometry_statistics->GetGeometryTypes();
+    EXPECT_EQ(1, geometry_types.size());
+    EXPECT_EQ(1, geometry_types[0]);
+    EXPECT_DOUBLE_EQ(0, geometry_statistics->GetXMin());
+    EXPECT_DOUBLE_EQ(1, geometry_statistics->GetYMin());
+    EXPECT_DOUBLE_EQ(99, geometry_statistics->GetXMax());
+    EXPECT_DOUBLE_EQ(100, geometry_statistics->GetYMax());
+    EXPECT_FALSE(geometry_statistics->HasZ());
+    EXPECT_FALSE(geometry_statistics->HasM());
   }
 };
 
