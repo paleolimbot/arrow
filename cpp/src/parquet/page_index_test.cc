@@ -23,10 +23,13 @@
 #include "arrow/io/file.h"
 #include "arrow/util/float16.h"
 #include "parquet/file_reader.h"
+#include "parquet/geometry_util_internal.h"
 #include "parquet/metadata.h"
 #include "parquet/schema.h"
+#include "parquet/statistics.h"
 #include "parquet/test_util.h"
 #include "parquet/thrift_internal.h"
+#include "parquet/types.h"
 
 namespace parquet {
 
@@ -512,6 +515,9 @@ void TestWriteTypedColumnIndex(schema::NodePtr node,
   }
   auto descr = std::make_unique<ColumnDescriptor>(node, max_definition_level,
                                                   max_repetition_level);
+  bool is_geometry =
+      (descr->logical_type() != nullptr && descr->logical_type()->is_geometry());
+
   auto builder = ColumnIndexBuilder::Make(descr.get());
   for (size_t i = 0; i < page_stats.size(); ++i) {
     auto size_stats = build_size_stats
@@ -546,16 +552,34 @@ void TestWriteTypedColumnIndex(schema::NodePtr node,
 
     for (size_t i = 0; i < num_pages; ++i) {
       ASSERT_EQ(page_stats[i].all_null_value, column_index->null_pages()[i]);
-      ASSERT_EQ(page_stats[i].min(), column_index->encoded_min_values()[i]);
-      ASSERT_EQ(page_stats[i].max(), column_index->encoded_max_values()[i]);
+      if (!is_geometry) {
+        ASSERT_EQ(page_stats[i].min(), column_index->encoded_min_values()[i]);
+        ASSERT_EQ(page_stats[i].max(), column_index->encoded_max_values()[i]);
+      }
       if (has_null_counts) {
         ASSERT_EQ(page_stats[i].null_count, column_index->null_counts()[i]);
       }
+
       if (build_size_stats) {
         ASSERT_NO_FATAL_FAILURE(VerifyPageLevelHistogram(
             i, page_levels[i].def_levels, column_index->definition_level_histograms()));
         ASSERT_NO_FATAL_FAILURE(VerifyPageLevelHistogram(
             i, page_levels[i].rep_levels, column_index->repetition_level_histograms()));
+      }
+
+      if (page_stats[i].has_geometry_statistics) {
+        const auto& expected_stats = page_stats[i].geometry_statistics();
+        const auto& actual_stats = column_index->encoded_geometry_statistics()[i];
+        ASSERT_EQ(expected_stats.geometry_types, actual_stats.geometry_types);
+        ASSERT_EQ(expected_stats.coverings, actual_stats.coverings);
+        ASSERT_DOUBLE_EQ(expected_stats.xmin, actual_stats.xmin);
+        ASSERT_DOUBLE_EQ(expected_stats.xmax, actual_stats.xmax);
+        ASSERT_DOUBLE_EQ(expected_stats.ymin, actual_stats.ymin);
+        ASSERT_DOUBLE_EQ(expected_stats.ymax, actual_stats.ymax);
+        ASSERT_DOUBLE_EQ(expected_stats.zmin, actual_stats.zmin);
+        ASSERT_DOUBLE_EQ(expected_stats.zmax, actual_stats.zmax);
+        ASSERT_DOUBLE_EQ(expected_stats.mmin, actual_stats.mmin);
+        ASSERT_DOUBLE_EQ(expected_stats.mmax, actual_stats.mmax);
       }
     }
   }
@@ -666,6 +690,37 @@ TEST(PageIndex, WriteFloat16ColumnIndex) {
       "c1", Repetition::OPTIONAL, LogicalType::Float16(), Type::FIXED_LEN_BYTE_ARRAY,
       /*length=*/2);
   TestWriteTypedColumnIndex(std::move(node), page_stats, BoundaryOrder::Ascending,
+                            /*has_null_counts=*/false);
+}
+
+TEST(PageIndex, WriteGeometryColumnIndex) {
+  std::vector<EncodedStatistics> page_stats(3);
+
+  EncodedGeometryStatistics geom_stats[3];
+  for (int i = 0; i < 3; i++) {
+    geom_stats[i].xmin = i + 1;
+    geom_stats[i].xmax = i + 2;
+    geom_stats[i].ymin = i + 3;
+    geom_stats[i].ymax = i + 4;
+    geom_stats[i].zmin = i + 5;
+    geom_stats[i].zmax = i + 6;
+    geom_stats[i].mmin = i + 7;
+    geom_stats[i].mmax = i + 8;
+    geom_stats[i].geometry_types = {i + 1};
+    std::string covering = geometry::MakeCoveringWKBFromBound(
+        geom_stats[i].xmin, geom_stats[i].xmax, geom_stats[i].ymin, geom_stats[i].ymax);
+    geom_stats[i].coverings = {{"WKB", covering}};
+    page_stats.at(i).set_geometry(geom_stats[i]);
+  }
+
+  schema::NodePtr node = schema::PrimitiveNode::Make(
+      "c1", Repetition::OPTIONAL,
+      GeometryLogicalType::Make(R"({"id": {"authority": "OGC", "code": "CRS84"}})",
+                                LogicalType::GeometryEdges::PLANAR,
+                                LogicalType::GeometryEncoding::WKB, "metadata0"),
+      Type::BYTE_ARRAY);
+
+  TestWriteTypedColumnIndex(node, page_stats, BoundaryOrder::Unordered,
                             /*has_null_counts=*/false);
 }
 

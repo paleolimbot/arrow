@@ -27,6 +27,11 @@
 
 namespace parquet {
 
+class EncodedStatistics;
+class EncodedGeometryStatistics;
+class GeometryStatistics;
+struct PageIndexLocation;
+
 /// \brief ColumnIndex is a proxy around format::ColumnIndex.
 class PARQUET_EXPORT ColumnIndex {
  public:
@@ -86,6 +91,12 @@ class PARQUET_EXPORT ColumnIndex {
 
   /// \brief List of repetition level histograms for each page concatenated together.
   virtual const std::vector<int64_t>& repetition_level_histograms() const = 0;
+  /// \brief A vector of encoded geometry statistics for each data page in this column.
+  ///
+  /// `null_pages` should be inspected first, as only pages with non-null values
+  /// may have their upper bounds populated.
+  virtual const std::vector<EncodedGeometryStatistics>& encoded_geometry_statistics()
+      const = 0;
 };
 
 /// \brief Typed implementation of ColumnIndex.
@@ -106,6 +117,12 @@ class PARQUET_EXPORT TypedColumnIndex : public ColumnIndex {
   ///
   /// Just like `min_values`, but for upper bounds instead of lower bounds.
   virtual const std::vector<T>& max_values() const = 0;
+
+  /// \brief A vector of geometry statistics for each data page in this column.
+  ///
+  /// This is like `min_values` and `max_values`, but for geometry statistics
+  /// instead of lower/upper bounds
+  virtual const std::vector<GeometryStatistics>& geometry_statistics() const = 0;
 };
 
 using BoolColumnIndex = TypedColumnIndex<BooleanType>;
