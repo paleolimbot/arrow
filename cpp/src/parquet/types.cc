@@ -503,12 +503,7 @@ std::shared_ptr<const LogicalType> LogicalType::FromThrift(
                              type.GEOMETRY.encoding);
     }
 
-    std::string metadata;
-    if (type.GEOMETRY.__isset.metadata) {
-      metadata = type.GEOMETRY.metadata;
-    }
-
-    return GeometryLogicalType::Make(crs, edges, encoding, metadata);
+    return GeometryLogicalType::Make(crs, edges, encoding);
   } else {
     throw ParquetException("Metadata contains Thrift LogicalType that is not recognized");
   }
@@ -568,8 +563,8 @@ std::shared_ptr<const LogicalType> LogicalType::Float16() {
 
 std::shared_ptr<const LogicalType> LogicalType::Geometry(
     std::string crs, LogicalType::GeometryEdges::edges edges,
-    LogicalType::GeometryEncoding::geometry_encoding encoding, std::string metadata) {
-  return GeometryLogicalType::Make(std::move(crs), edges, encoding, std::move(metadata));
+    LogicalType::GeometryEncoding::geometry_encoding encoding) {
+  return GeometryLogicalType::Make(std::move(crs), edges, encoding);
 }
 
 std::shared_ptr<const LogicalType> LogicalType::None() { return NoLogicalType::Make(); }
@@ -1692,30 +1687,25 @@ class LogicalType::Impl::Geometry final : public LogicalType::Impl::Incompatible
   const std::string& crs() const { return crs_; }
   LogicalType::GeometryEdges::edges edges() const { return edges_; }
   LogicalType::GeometryEncoding::geometry_encoding encoding() const { return encoding_; }
-  const std::string& metadata() const { return metadata_; }
 
  private:
   Geometry(std::string crs, LogicalType::GeometryEdges::edges edges,
-           LogicalType::GeometryEncoding::geometry_encoding encoding,
-           std::string metadata)
+           LogicalType::GeometryEncoding::geometry_encoding encoding)
       : LogicalType::Impl(LogicalType::Type::GEOMETRY, SortOrder::UNSIGNED),
         LogicalType::Impl::SimpleApplicable(parquet::Type::BYTE_ARRAY),
         crs_(std::move(crs)),
         edges_(edges),
-        encoding_(encoding),
-        metadata_(std::move(metadata)) {}
+        encoding_(encoding) {}
 
   std::string crs_;
   LogicalType::GeometryEdges::edges edges_;
   LogicalType::GeometryEncoding::geometry_encoding encoding_;
-  std::string metadata_;
 };
 
 std::string LogicalType::Impl::Geometry::ToString() const {
   std::stringstream type;
   type << "Geometry(crs=" << crs_ << ", edges=" << geometry_edges_string(edges_)
-       << ", encoding=" << geometry_encoding_string(encoding_)
-       << ", metadata=" << metadata_ << ")";
+       << ", encoding=" << geometry_encoding_string(encoding_) << ")";
   return type.str();
 }
 
@@ -1730,11 +1720,6 @@ std::string LogicalType::Impl::Geometry::ToJSON() const {
 
   json << R"(, "edges": ")" << geometry_edges_string(edges_) << R"(")";
   json << R"(, "encoding": ")" << geometry_encoding_string(encoding_) << R"(")";
-
-  if (!metadata_.empty()) {
-    // TODO(paleolimbot): we'll need to escape the metadata or assume that it's valid JSON
-    json << R"(, "metadata": )" << crs_;
-  }
 
   json << "}";
   return json.str();
@@ -1762,11 +1747,6 @@ format::LogicalType LogicalType::Impl::Geometry::ToThrift() const {
   }
   geometry_type.__set_encoding(format::GeometryEncoding::WKB);
 
-  // Canonically export empty metadata as unset
-  if (!metadata_.empty()) {
-    geometry_type.__set_metadata(metadata_);
-  }
-
   type.__set_GEOMETRY(geometry_type);
   return type;
 }
@@ -1775,8 +1755,7 @@ bool LogicalType::Impl::Geometry::Equals(const LogicalType& other) const {
   if (other.is_geometry()) {
     const auto& other_geometry = checked_cast<const GeometryLogicalType&>(other);
     return crs() == other_geometry.crs() && edges() == other_geometry.edges() &&
-           encoding() == other_geometry.encoding() &&
-           metadata() == other_geometry.metadata();
+           encoding() == other_geometry.encoding();
   } else {
     return false;
   }
@@ -1794,16 +1773,12 @@ LogicalType::GeometryEncoding::geometry_encoding GeometryLogicalType::encoding()
   return (dynamic_cast<const LogicalType::Impl::Geometry&>(*impl_)).encoding();
 }
 
-const std::string& GeometryLogicalType::metadata() const {
-  return (dynamic_cast<const LogicalType::Impl::Geometry&>(*impl_)).metadata();
-}
-
 std::shared_ptr<const LogicalType> GeometryLogicalType::Make(
     std::string crs, LogicalType::GeometryEdges::edges edges,
-    LogicalType::GeometryEncoding::geometry_encoding encoding, std::string metadata) {
+    LogicalType::GeometryEncoding::geometry_encoding encoding) {
   auto* logical_type = new GeometryLogicalType();
-  logical_type->impl_.reset(new LogicalType::Impl::Geometry(
-      std::move(crs), edges, encoding, std::move(metadata)));
+  logical_type->impl_.reset(
+      new LogicalType::Impl::Geometry(std::move(crs), edges, encoding));
   return std::shared_ptr<const LogicalType>(logical_type);
 }
 
