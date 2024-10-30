@@ -28,8 +28,6 @@
 namespace parquet {
 
 class EncodedStatistics;
-class EncodedGeometryStatistics;
-class GeometryStatistics;
 struct PageIndexLocation;
 
 /// \brief ColumnIndex is a proxy around format::ColumnIndex.
