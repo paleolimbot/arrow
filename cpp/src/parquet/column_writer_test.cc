@@ -412,10 +412,14 @@ class TestPrimitiveWriter : public PrimitiveTypedTest<TestType> {
   }
 
   std::shared_ptr<Statistics> metadata_stats() {
+    return metadata_accessor()->statistics();
+  }
+
+  std::shared_ptr<GeometryStatistics> metadata_geometry_stats() {
     ApplicationVersion app_version(this->writer_properties_->created_by());
     auto metadata_accessor = ColumnChunkMetaData::Make(
         metadata_->contents(), this->descr_, default_reader_properties(), &app_version);
-    return metadata_accessor->statistics();
+    return metadata_accessor->geometry_statistics();
   }
 
  protected:
@@ -1903,6 +1907,8 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
     EXPECT_TRUE(statistics->HasMinMax());
     EXPECT_TRUE(statistics->HasGeometryStatistics());
     const GeometryStatistics* geometry_statistics = statistics->geometry_statistics();
+    std::shared_ptr<GeometryStatistics> geometry_statistics = metadata_geometry_stats();
+    ASSERT_TRUE(geometry_statistics != nullptr);
     std::vector<int32_t> geometry_types = geometry_statistics->GetGeometryTypes();
     EXPECT_EQ(1, geometry_types.size());
     EXPECT_EQ(1, geometry_types[0]);
@@ -1912,19 +1918,6 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
     EXPECT_DOUBLE_EQ(100, geometry_statistics->GetYMax());
     EXPECT_FALSE(geometry_statistics->HasZ());
     EXPECT_FALSE(geometry_statistics->HasM());
-
-    auto byte_array_statistics =
-        std::static_pointer_cast<ByteArrayStatistics>(statistics);
-    double min_x = 0;
-    double min_y = 0;
-    double max_x = 0;
-    double max_y = 0;
-    GetWKBPointCoordinate(byte_array_statistics->min(), &min_x, &min_y);
-    GetWKBPointCoordinate(byte_array_statistics->max(), &max_x, &max_y);
-    EXPECT_DOUBLE_EQ(0, min_x);
-    EXPECT_DOUBLE_EQ(1, min_y);
-    EXPECT_DOUBLE_EQ(99, max_x);
-    EXPECT_DOUBLE_EQ(100, max_y);
   }
 
   void TestWriteAndReadSpaced(ParquetVersion::type version,
@@ -1976,10 +1969,8 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
       EXPECT_DOUBLE_EQ(expected_y, y);
     }
 
-    std::shared_ptr<Statistics> statistics = metadata_stats();
-    EXPECT_TRUE(statistics->HasMinMax());
-    EXPECT_TRUE(statistics->HasGeometryStatistics());
-    const GeometryStatistics* geometry_statistics = statistics->geometry_statistics();
+    std::shared_ptr<GeometryStatistics> geometry_statistics = metadata_geometry_stats();
+    ASSERT_TRUE(geometry_statistics != nullptr);
     std::vector<int32_t> geometry_types = geometry_statistics->GetGeometryTypes();
     EXPECT_EQ(1, geometry_types.size());
     EXPECT_EQ(1, geometry_types[0]);

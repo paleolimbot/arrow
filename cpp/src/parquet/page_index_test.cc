@@ -23,13 +23,10 @@
 #include "arrow/io/file.h"
 #include "arrow/util/float16.h"
 #include "parquet/file_reader.h"
-#include "parquet/geometry_util_internal.h"
 #include "parquet/metadata.h"
 #include "parquet/schema.h"
-#include "parquet/statistics.h"
 #include "parquet/test_util.h"
 #include "parquet/thrift_internal.h"
-#include "parquet/types.h"
 
 namespace parquet {
 
@@ -687,36 +684,6 @@ TEST(PageIndex, WriteFloat16ColumnIndex) {
       "c1", Repetition::OPTIONAL, LogicalType::Float16(), Type::FIXED_LEN_BYTE_ARRAY,
       /*length=*/2);
   TestWriteTypedColumnIndex(std::move(node), page_stats, BoundaryOrder::Ascending,
-                            /*has_null_counts=*/false);
-}
-
-TEST(PageIndex, WriteGeometryColumnIndex) {
-  std::vector<EncodedStatistics> page_stats(3);
-
-  EncodedGeometryStatistics geom_stats[3];
-  std::string dummy_min = "dummy_min";
-  std::string dummy_max = "dummy_max";
-  for (int i = 0; i < 3; i++) {
-    geom_stats[i].xmin = i + 1;
-    geom_stats[i].xmax = i + 2;
-    geom_stats[i].ymin = i + 3;
-    geom_stats[i].ymax = i + 4;
-    geom_stats[i].zmin = i + 5;
-    geom_stats[i].zmax = i + 6;
-    geom_stats[i].mmin = i + 7;
-    geom_stats[i].mmax = i + 8;
-    geom_stats[i].geometry_types = {i + 1};
-    page_stats.at(i).set_min(dummy_min).set_max(dummy_max);
-    page_stats.at(i).set_geometry(geom_stats[i]);
-  }
-
-  schema::NodePtr node = schema::PrimitiveNode::Make(
-      "c1", Repetition::OPTIONAL,
-      GeometryLogicalType::Make("OGC:CRS84", LogicalType::GeometryEdges::PLANAR,
-                                LogicalType::GeometryEncoding::WKB),
-      Type::BYTE_ARRAY);
-
-  TestWriteTypedColumnIndex(node, page_stats, BoundaryOrder::Ascending,
                             /*has_null_counts=*/false);
 }
 
