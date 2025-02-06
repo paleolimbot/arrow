@@ -1886,27 +1886,8 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
       EXPECT_DOUBLE_EQ(expected_y, y);
     }
 
-    auto metadata_accessor = this->metadata_accessor();
-    // auto statistics = metadata_accessor->statistics();
-
-    // auto metadata_encodings = this->metadata_encodings();
-    // std::set<Encoding::type> metadata_encodings_set{metadata_encodings.begin(),
-    //                                                 metadata_encodings.end()};
-    // EXPECT_EQ(expected_encodings, metadata_encodings_set);
-
-    auto encoded_statistics = metadata_encoded_stats();
-    EXPECT_TRUE(encoded_statistics.has_geometry_statistics);
-    auto geometry_statistics = encoded_statistics.geometry_statistics();
-    EXPECT_EQ(1, geometry_statistics.geometry_types.size());
-    EXPECT_EQ(1, geometry_statistics.geometry_types[0]);
-    EXPECT_DOUBLE_EQ(0, geometry_statistics.xmin);
-    EXPECT_DOUBLE_EQ(1, geometry_statistics.ymin);
-    EXPECT_DOUBLE_EQ(99, geometry_statistics.xmax);
-    EXPECT_DOUBLE_EQ(100, geometry_statistics.ymax);
     std::shared_ptr<Statistics> statistics = metadata_stats();
     EXPECT_TRUE(statistics->HasMinMax());
-    EXPECT_TRUE(statistics->HasGeometryStatistics());
-    const GeometryStatistics* geometry_statistics = statistics->geometry_statistics();
     std::shared_ptr<GeometryStatistics> geometry_statistics = metadata_geometry_stats();
     ASSERT_TRUE(geometry_statistics != nullptr);
     std::vector<int32_t> geometry_types = geometry_statistics->GetGeometryTypes();

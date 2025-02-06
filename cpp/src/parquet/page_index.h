@@ -19,6 +19,7 @@
 
 #include "arrow/io/interfaces.h"
 #include "parquet/encryption/type_fwd.h"
+#include "parquet/metadata.h"
 #include "parquet/type_fwd.h"
 #include "parquet/types.h"
 
@@ -89,13 +90,6 @@ class PARQUET_EXPORT ColumnIndex {
 
   /// \brief List of repetition level histograms for each page concatenated together.
   virtual const std::vector<int64_t>& repetition_level_histograms() const = 0;
-
-  /// \brief A vector of encoded geometry statistics for each data page in this column.
-  ///
-  /// `null_pages` should be inspected first, as only pages with non-null values
-  /// may have their upper bounds populated.
-  virtual const std::vector<EncodedGeometryStatistics>& encoded_geometry_statistics()
-      const = 0;
 };
 
 /// \brief Typed implementation of ColumnIndex.
