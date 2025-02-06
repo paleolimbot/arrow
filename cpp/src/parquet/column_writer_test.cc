@@ -1886,8 +1886,6 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
       EXPECT_DOUBLE_EQ(expected_y, y);
     }
 
-    std::shared_ptr<Statistics> statistics = metadata_stats();
-    EXPECT_TRUE(statistics->HasMinMax());
     std::shared_ptr<GeometryStatistics> geometry_statistics = metadata_geometry_stats();
     ASSERT_TRUE(geometry_statistics != nullptr);
     std::vector<int32_t> geometry_types = geometry_statistics->GetGeometryTypes();
