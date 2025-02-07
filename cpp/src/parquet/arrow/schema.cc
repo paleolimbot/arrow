@@ -21,6 +21,12 @@
 #include <string>
 #include <vector>
 
+// TODO(paleolimbot): Remove once example files are generated
+#include "arrow/json/rapidjson_defs.h"  // IWYU pragma: keep
+
+#include <rapidjson/document.h>
+#include <rapidjson/writer.h>
+
 #include "arrow/extension/json.h"
 #include "arrow/extension_type.h"
 #include "arrow/io/memory.h"
@@ -243,6 +249,56 @@ static Status GetTimestampMetadata(const ::arrow::TimestampType& type,
   return Status::OK();
 }
 
+// TODO(paleolimbot): Remove once example files are written
+Result<std::shared_ptr<const LogicalType>> GeospatialLogicalTypeFromArrow(
+    const std::string& serialized_data, const ArrowWriterProperties& arrow_properties) {
+  if (serialized_data.empty() || serialized_data == "{}") {
+    return LogicalType::Geometry();
+  }
+
+  namespace rj = ::arrow::rapidjson;
+  rj::Document document;
+  if (document.Parse(serialized_data.data(), serialized_data.length()).HasParseError()) {
+    return Status::Invalid("Invalid serialized JSON data: ", serialized_data);
+  }
+
+  std::string crs_type;
+  if (document.HasMember("crs_type")) {
+    crs_type = document["crs_type"].GetString();
+  }
+
+  std::string crs;
+  if (document.HasMember("crs")) {
+    const auto& json_crs = document["crs"];
+    if (json_crs.IsString() && crs_type == "srid") {
+      crs = std::string("srid:") + json_crs.GetString();
+    } else if (json_crs.IsObject()) {
+      rj::StringBuffer buffer;
+      rj::Writer<rj::StringBuffer> writer(buffer);
+      document.Accept(writer);
+
+      // TODO(paleolimbot) this is not quite correct because we're supposed to put this
+      // in the metadata according to the spec. We probably need to find a way to put
+      // this in the arrow_properties.
+      crs = std::string("projjson:") + buffer.GetString();
+    } else {
+      // e.g., authority:code, WKT2, arbitrary string
+      return Status::Invalid("Unsupported GeoArrow CRS for Parquet: ", serialized_data);
+    }
+  }
+
+  if (document.HasMember("edges") && document["edges"] == "planar") {
+    return LogicalType::Geometry(crs);
+  } else if (document.HasMember("edges") && document["edges"] == "spherical") {
+    return LogicalType::Geography(crs,
+                                  LogicalType::EdgeInterpolationAlgorithm::SPHERICAL);
+  } else if (document.HasMember("edges")) {
+    return Status::NotImplemented("GeoArrow edge type: ", serialized_data);
+  }
+
+  return LogicalType::Geometry(crs);
+}
+
 static constexpr char FIELD_ID_KEY[] = "PARQUET:field_id";
 
 std::shared_ptr<::arrow::KeyValueMetadata> FieldIdMetadata(int field_id) {
@@ -428,13 +484,19 @@ Status FieldToNode(const std::string& name, const std::shared_ptr<Field>& field,
     }
     case ArrowTypeId::EXTENSION: {
       auto ext_type = std::static_pointer_cast<::arrow::ExtensionType>(field->type());
-      // Built-in JSON extension is handled differently.
+      // Built-in JSON extension and GeoArrow are handled differently.
       if (ext_type->extension_name() == std::string("arrow.json")) {
         // Set physical and logical types and instantiate primitive node.
         type = ParquetType::BYTE_ARRAY;
         logical_type = LogicalType::JSON();
         break;
+      } else if (ext_type->extension_name() == std::string("geoarrow.wkb")) {
+        type = ParquetType::BYTE_ARRAY;
+        ARROW_ASSIGN_OR_RAISE(logical_type, GeospatialLogicalTypeFromArrow(
+                                                ext_type->Serialize(), arrow_properties));
+        break;
       }
+
       std::shared_ptr<::arrow::Field> storage_field = ::arrow::field(
           name, ext_type->storage_type(), field->nullable(), field->metadata());
       return FieldToNode(name, storage_field, properties, arrow_properties, out);
