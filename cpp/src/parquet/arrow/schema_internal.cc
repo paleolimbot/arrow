@@ -146,7 +146,7 @@ Result<std::shared_ptr<ArrowType>> MakeGeoArrowGeometryType(
         std::string crs_metadata,
         MakeGeoArrowCrsMetadata(geospatial_type.crs(), reader_properties));
     std::string edges_metadata =
-        R"("edges": ")" + geospatial_type.algorithm_name() + R"(")";
+        R"("edges": ")" + std::string(geospatial_type.algorithm_name()) + R"(")";
     std::string serialized_data =
         std::string("{") + crs_metadata + ", " + edges_metadata + "}";
     return maybe_geoarrow_wkb->Deserialize(::arrow::binary(), serialized_data);
@@ -174,6 +174,8 @@ Result<std::shared_ptr<ArrowType>> FromByteArray(
     case LogicalType::Type::GEOMETRY:
     case LogicalType::Type::GEOGRAPHY:
       if (reader_properties.get_arrow_extensions_enabled()) {
+        // Attempt creating a GeoArrow extension type (or return binary()
+        // if types are not registered)
         return MakeGeoArrowGeometryType(logical_type, reader_properties);
       }
 
