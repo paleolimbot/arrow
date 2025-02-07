@@ -415,7 +415,7 @@ class TestPrimitiveWriter : public PrimitiveTypedTest<TestType> {
     return metadata_accessor()->statistics();
   }
 
-  std::shared_ptr<GeometryStatistics> metadata_geometry_stats() {
+  std::shared_ptr<GeospatialStatistics> metadata_geometry_stats() {
     ApplicationVersion app_version(this->writer_properties_->created_by());
     auto metadata_accessor = ColumnChunkMetaData::Make(
         metadata_->contents(), this->descr_, default_reader_properties(), &app_version);
@@ -1886,11 +1886,11 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
       EXPECT_DOUBLE_EQ(expected_y, y);
     }
 
-    std::shared_ptr<GeometryStatistics> geometry_statistics = metadata_geometry_stats();
+    std::shared_ptr<GeospatialStatistics> geometry_statistics = metadata_geometry_stats();
     ASSERT_TRUE(geometry_statistics != nullptr);
-    std::vector<int32_t> geometry_types = geometry_statistics->GetGeometryTypes();
-    EXPECT_EQ(1, geometry_types.size());
-    EXPECT_EQ(1, geometry_types[0]);
+    std::vector<int32_t> geospatial_types = geometry_statistics->GetGeometryTypes();
+    EXPECT_EQ(1, geospatial_types.size());
+    EXPECT_EQ(1, geospatial_types[0]);
     EXPECT_DOUBLE_EQ(0, geometry_statistics->GetXMin());
     EXPECT_DOUBLE_EQ(1, geometry_statistics->GetYMin());
     EXPECT_DOUBLE_EQ(99, geometry_statistics->GetXMax());
@@ -1948,11 +1948,11 @@ class TestGeometryValuesWriter : public TestPrimitiveWriter<ByteArrayType> {
       EXPECT_DOUBLE_EQ(expected_y, y);
     }
 
-    std::shared_ptr<GeometryStatistics> geometry_statistics = metadata_geometry_stats();
+    std::shared_ptr<GeospatialStatistics> geometry_statistics = metadata_geometry_stats();
     ASSERT_TRUE(geometry_statistics != nullptr);
-    std::vector<int32_t> geometry_types = geometry_statistics->GetGeometryTypes();
-    EXPECT_EQ(1, geometry_types.size());
-    EXPECT_EQ(1, geometry_types[0]);
+    std::vector<int32_t> geospatial_types = geometry_statistics->GetGeometryTypes();
+    EXPECT_EQ(1, geospatial_types.size());
+    EXPECT_EQ(1, geospatial_types[0]);
     EXPECT_DOUBLE_EQ(1, geometry_statistics->GetXMin());
     EXPECT_DOUBLE_EQ(2, geometry_statistics->GetYMin());
     EXPECT_DOUBLE_EQ(98, geometry_statistics->GetXMax());
