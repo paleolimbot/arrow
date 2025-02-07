@@ -488,8 +488,8 @@ std::shared_ptr<const LogicalType> LogicalType::FromThrift(
     return GeometryLogicalType::Make(crs);
   } else if (type.__isset.GEOGRAPHY) {
     std::string crs;
-    if (type.GEOMETRY.__isset.crs) {
-      crs = type.GEOMETRY.crs;
+    if (type.GEOGRAPHY.__isset.crs) {
+      crs = type.GEOGRAPHY.crs;
     }
 
     LogicalType::GeometryEdges::edges edges = LogicalType::GeometryEdges::UNKNOWN;
@@ -1761,7 +1761,7 @@ class LogicalType::Impl::Geography final : public LogicalType::Impl::Incompatibl
 
  private:
   Geography(std::string crs, LogicalType::GeometryEdges::edges edges)
-      : LogicalType::Impl(LogicalType::Type::GEOMETRY, SortOrder::UNKNOWN),
+      : LogicalType::Impl(LogicalType::Type::GEOGRAPHY, SortOrder::UNKNOWN),
         LogicalType::Impl::SimpleApplicable(parquet::Type::BYTE_ARRAY),
         crs_(std::move(crs)),
         edges_(edges) {}
@@ -1772,7 +1772,7 @@ class LogicalType::Impl::Geography final : public LogicalType::Impl::Incompatibl
 
 std::string LogicalType::Impl::Geography::ToString() const {
   std::stringstream type;
-  type << "Geography(crs=" << crs_ << ")";
+  type << "Geography(crs=" << crs_ << ", edges=" << geometry_edges_string(edges_) << ")";
   return type.str();
 }
 
@@ -1814,16 +1814,16 @@ format::LogicalType LogicalType::Impl::Geography::ToThrift() const {
 }
 
 bool LogicalType::Impl::Geography::Equals(const LogicalType& other) const {
-  if (other.is_geometry()) {
-    const auto& other_geometry = checked_cast<const GeometryLogicalType&>(other);
-    return crs() == other_geometry.crs();
+  if (other.is_geography()) {
+    const auto& other_geography = checked_cast<const GeographyLogicalType&>(other);
+    return crs() == other_geography.crs() && edges() == other_geography.edges();
   } else {
     return false;
   }
 }
 
 const std::string& GeographyLogicalType::crs() const {
-  return (dynamic_cast<const LogicalType::Impl::Geometry&>(*impl_)).crs();
+  return (dynamic_cast<const LogicalType::Impl::Geography&>(*impl_)).crs();
 }
 
 LogicalType::GeometryEdges::edges GeographyLogicalType::edges() const {
