@@ -34,6 +34,7 @@
 #include "arrow/array.h"
 #include "arrow/extension/json.h"
 #include "arrow/ipc/writer.h"
+#include "arrow/testing/extension_type.h"
 #include "arrow/testing/gtest_util.h"
 #include "arrow/type.h"
 #include "arrow/util/base64.h"
@@ -68,6 +69,42 @@ const auto TIMESTAMP_US = ::arrow::timestamp(TimeUnit::MICRO);
 const auto TIMESTAMP_NS = ::arrow::timestamp(TimeUnit::NANO);
 const auto BINARY = ::arrow::binary();
 const auto DECIMAL_8_4 = std::make_shared<::arrow::Decimal128Type>(8, 4);
+
+// A minimal version of a geoarrow.wkb extension type to test interoperability
+class GeoArrowWkbExtensionType : public ::arrow::ExtensionType {
+ public:
+  explicit GeoArrowWkbExtensionType(std::shared_ptr<::arrow::DataType> storage_type,
+                                    std::string metadata)
+      : ::arrow::ExtensionType(std::move(storage_type)), metadata_(std::move(metadata)) {}
+
+  std::string extension_name() const override { return "geoarrow.wkb"; }
+
+  std::string Serialize() const override { return metadata_; }
+
+  ::arrow::Result<std::shared_ptr<::arrow::DataType>> Deserialize(
+      std::shared_ptr<::arrow::DataType> storage_type,
+      const std::string& serialized_data) const override {
+    return std::make_shared<GeoArrowWkbExtensionType>(std::move(storage_type),
+                                                      serialized_data);
+  }
+
+  std::shared_ptr<::arrow::Array> MakeArray(
+      std::shared_ptr<::arrow::ArrayData> data) const override {
+    return std::make_shared<::arrow::ExtensionArray>(data);
+  }
+
+  bool ExtensionEquals(const ExtensionType& other) const override {
+    return other.extension_name() == extension_name() && other.Serialize() == Serialize();
+  }
+
+ private:
+  std::string metadata_;
+};
+
+std::shared_ptr<::arrow::DataType> geoarrow_wkb(std::string metadata = "{}") {
+  return std::make_shared<GeoArrowWkbExtensionType>(::arrow::binary(),
+                                                    std::move(metadata));
+}
 
 class TestConvertParquetSchema : public ::testing::Test {
  public:
@@ -236,6 +273,10 @@ TEST_F(TestConvertParquetSchema, ParquetAnnotatedFields) {
        ::arrow::int64()},
       {"json", LogicalType::JSON(), ParquetType::BYTE_ARRAY, -1, ::arrow::utf8()},
       {"bson", LogicalType::BSON(), ParquetType::BYTE_ARRAY, -1, ::arrow::binary()},
+      {"geometry", LogicalType::Geometry(), ParquetType::BYTE_ARRAY, -1,
+       ::arrow::binary()},
+      {"geography", LogicalType::Geography(), ParquetType::BYTE_ARRAY, -1,
+       ::arrow::binary()},
       {"interval", LogicalType::Interval(), ParquetType::FIXED_LEN_BYTE_ARRAY, 12,
        ::arrow::fixed_size_binary(12)},
       {"uuid", LogicalType::UUID(), ParquetType::FIXED_LEN_BYTE_ARRAY, 16,
@@ -945,6 +986,48 @@ TEST_F(TestConvertParquetSchema, ParquetSchemaArrowExtensions) {
     ASSERT_OK(ArrowSchemaToParquetMetadata(arrow_schema, metadata));
     ASSERT_OK(ConvertSchema(parquet_fields, metadata, props));
     CheckFlatSchema(arrow_schema, true /* check_metadata */);
+  }
+}
+
+TEST_F(TestConvertParquetSchema, ParquetSchemaGeoArrowExtensions) {
+  std::vector<NodePtr> parquet_fields;
+  parquet_fields.push_back(PrimitiveNode::Make("geometry", Repetition::OPTIONAL,
+                                               LogicalType::Geometry(),
+                                               ParquetType::BYTE_ARRAY));
+  parquet_fields.push_back(PrimitiveNode::Make("geography", Repetition::OPTIONAL,
+                                               LogicalType::Geography(),
+                                               ParquetType::BYTE_ARRAY));
+
+  {
+    // Parquet file does not contain Arrow schema.
+    // By default, both fields should be treated as binary() fields in Arrow.
+    auto arrow_schema = ::arrow::schema({::arrow::field("geometry", BINARY, true),
+                                         ::arrow::field("geography", BINARY, true)});
+    std::shared_ptr<KeyValueMetadata> metadata{};
+    ASSERT_OK(ConvertSchema(parquet_fields, metadata));
+    CheckFlatSchema(arrow_schema);
+  }
+
+  {
+    // Parquet file does not contain Arrow schema.
+    // If Arrow extensions are enabled and extensions are registered,
+    // fields will be interpreted as geoarrow_wkb(utf8()) extension fields.
+    ::arrow::ExtensionTypeGuard guard(geoarrow_wkb());
+
+    ArrowReaderProperties props;
+    props.set_arrow_extensions_enabled(true);
+    auto arrow_schema = ::arrow::schema(
+        {::arrow::field(
+             "geometry",
+             geoarrow_wkb(R"({"crs": "OGC:CRS84", "crs_type": "authority_code"})"), true),
+         ::arrow::field(
+             "geography",
+             geoarrow_wkb(
+                 R"({"crs": "OGC:CRS84", "crs_type": "authority_code", "edges": "spherical"})"),
+             true)});
+    std::shared_ptr<KeyValueMetadata> metadata{};
+    ASSERT_OK(ConvertSchema(parquet_fields, metadata, props));
+    CheckFlatSchema(arrow_schema);
   }
 }
 

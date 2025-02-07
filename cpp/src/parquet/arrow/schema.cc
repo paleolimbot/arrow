@@ -250,8 +250,64 @@ static Status GetTimestampMetadata(const ::arrow::TimestampType& type,
 }
 
 // TODO(paleolimbot): Remove once example files are written
+Result<std::string> GeospatialGeoArrowCrsToParquetCrs(
+    const ::arrow::rapidjson::Document& document,
+    const ArrowWriterProperties& arrow_properties) {
+  namespace rj = ::arrow::rapidjson;
+
+  std::string crs_type;
+  if (document.HasMember("crs_type")) {
+    crs_type = document["crs_type"].GetString();
+  }
+
+  if (!document.HasMember("crs") || document["crs"].IsNull()) {
+    // Parquet GEOMETRY/GEOGRAPHY do not have a concept of a null/missing
+    // CRS, but an omitted one is more likely to have meant "lon/lat" than
+    // a truly unspecified one (i.e., Engineering CRS with arbitrary XY units)
+    return "";
+  }
+
+  const auto& json_crs = document["crs"];
+  if (json_crs.IsString() && crs_type == "srid") {
+    return std::string("srid:") + json_crs.GetString();
+  } else if (json_crs == "EPSG:4326" || json_crs == "OGC:CRS84") {
+    // crs can be left empty because these cases both correspond to
+    // longitude/latitude in WGS84 according to the Parquet specification
+    return "";
+  } else if (json_crs.IsObject()) {
+    rj::StringBuffer buffer;
+    rj::Writer<rj::StringBuffer> writer(buffer);
+    document.Accept(writer);
+
+    if (json_crs.HasMember("id")) {
+      const auto& identifier = json_crs["id"];
+      if (identifier.HasMember("authority") && identifier.HasMember("code")) {
+        if (identifier["authority"] == "OGC" && identifier["code"] == "CRS84") {
+          // longitude/latitude
+          return "";
+        } else if (identifier["authority"] == "EPSG" && identifier["code"] == 4326) {
+          // longitude/latitude
+          return "";
+        }
+      }
+    }
+
+    // TODO(paleolimbot) this is not quite correct because we're supposed to put this
+    // in the metadata according to the spec. We need to find a way to put
+    // this in the arrow_properties/file metadata via a CrsProvider or something.
+    return std::string("projjson:") + buffer.GetString();
+  } else {
+    // e.g., authority:code, WKT2, arbitrary string. A pluggable CrsProvider
+    // could handle these and return something we're allowed to write here.
+    return Status::Invalid("Unsupported GeoArrow CRS for Parquet");
+  }
+}
+
 Result<std::shared_ptr<const LogicalType>> GeospatialLogicalTypeFromArrow(
     const std::string& serialized_data, const ArrowWriterProperties& arrow_properties) {
+  // Parquet has no way to interpret a null or missing CRS; however, it is more likely
+  // to induce confusion insert the fully specified equivalent of a null CRS (custom
+  // engineering CRS with unspecified units)
   if (serialized_data.empty() || serialized_data == "{}") {
     return LogicalType::Geometry();
   }
@@ -262,30 +318,8 @@ Result<std::shared_ptr<const LogicalType>> GeospatialLogicalTypeFromArrow(
     return Status::Invalid("Invalid serialized JSON data: ", serialized_data);
   }
 
-  std::string crs_type;
-  if (document.HasMember("crs_type")) {
-    crs_type = document["crs_type"].GetString();
-  }
-
-  std::string crs;
-  if (document.HasMember("crs")) {
-    const auto& json_crs = document["crs"];
-    if (json_crs.IsString() && crs_type == "srid") {
-      crs = std::string("srid:") + json_crs.GetString();
-    } else if (json_crs.IsObject()) {
-      rj::StringBuffer buffer;
-      rj::Writer<rj::StringBuffer> writer(buffer);
-      document.Accept(writer);
-
-      // TODO(paleolimbot) this is not quite correct because we're supposed to put this
-      // in the metadata according to the spec. We probably need to find a way to put
-      // this in the arrow_properties.
-      crs = std::string("projjson:") + buffer.GetString();
-    } else {
-      // e.g., authority:code, WKT2, arbitrary string
-      return Status::Invalid("Unsupported GeoArrow CRS for Parquet: ", serialized_data);
-    }
-  }
+  ARROW_ASSIGN_OR_RAISE(std::string crs,
+                        GeospatialGeoArrowCrsToParquetCrs(document, arrow_properties));
 
   if (document.HasMember("edges") && document["edges"] == "planar") {
     return LogicalType::Geometry(crs);
@@ -323,8 +357,8 @@ int FieldIdFromMetadata(
   if (::arrow::internal::ParseValue<::arrow::Int32Type>(
           field_id_str.c_str(), field_id_str.length(), &field_id)) {
     if (field_id < 0) {
-      // Thrift should convert any negative value to null but normalize to -1 here in case
-      // we later check this in logic.
+      // Thrift should convert any negative value to null but normalize to -1 here in
+      // case we later check this in logic.
       return -1;
     }
     return field_id;
@@ -640,8 +674,8 @@ Status MapToSchemaField(const GroupNode& group, LevelInfo current_levels,
     return Status::Invalid("Map keys must be annotated as required.");
   }
   // Arrow doesn't support 1 column maps (i.e. Sets).  The options are to either
-  // make the values column nullable, or process the map as a list.  We choose the latter
-  // as it is simpler.
+  // make the values column nullable, or process the map as a list.  We choose the
+  // latter as it is simpler.
   if (key_value.field_count() == 1) {
     return ListToSchemaField(group, current_levels, ctx, parent, out);
   }
