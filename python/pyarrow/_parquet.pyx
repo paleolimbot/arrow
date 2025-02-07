@@ -452,7 +452,11 @@ cdef class ColumnChunkMetaData(_Weakrefable):
             Dictionary with a key for each attribute of this class.
         """
         statistics = self.statistics.to_dict() if self.is_stats_set else None
-        geospatial_statistics = self.geospatial_statistics.to_dict() if self.is_geometry_stats_set else None
+        if self.is_geometry_stats_set:
+            geospatial_statistics = self.geospatial_statistics.to_dict()
+        else:
+            geospatial_statistics = None
+
         d = dict(
             file_offset=self.file_offset,
             file_path=self.file_path,
