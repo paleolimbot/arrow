@@ -169,7 +169,7 @@ class PARQUET_EXPORT LogicalType {
   };
 
   struct GeometryEdges {
-    enum edges { UNKNOWN = 0, PLANAR = 1, SPHERICAL = 2 };
+    enum edges { UNKNOWN = 0, SPHERICAL = 1 };
   };
 
   /// \brief If possible, return a logical type equivalent to the given legacy
@@ -219,9 +219,11 @@ class PARQUET_EXPORT LogicalType {
   static std::shared_ptr<const LogicalType> UUID();
   static std::shared_ptr<const LogicalType> Float16();
 
-  static std::shared_ptr<const LogicalType> Geometry(
+  static std::shared_ptr<const LogicalType> Geometry(std::string crs = "");
+
+  static std::shared_ptr<const LogicalType> Geography(
       std::string crs = "",
-      LogicalType::GeometryEdges::edges edges = GeometryEdges::PLANAR);
+      LogicalType::GeometryEdges::edges edges = GeometryEdges::SPHERICAL);
 
   /// \brief Create a placeholder for when no logical type is specified
   static std::shared_ptr<const LogicalType> None();
@@ -277,6 +279,7 @@ class PARQUET_EXPORT LogicalType {
   bool is_UUID() const;
   bool is_float16() const;
   bool is_geometry() const;
+  bool is_geography() const;
   bool is_none() const;
   /// \brief Return true if this logical type is of a known type.
   bool is_valid() const;
@@ -459,15 +462,25 @@ class PARQUET_EXPORT Float16LogicalType : public LogicalType {
 
 class PARQUET_EXPORT GeometryLogicalType : public LogicalType {
  public:
+  static std::shared_ptr<const LogicalType> Make(std::string crs = "");
+
+  const std::string& crs() const;
+
+ private:
+  GeometryLogicalType() = default;
+};
+
+class PARQUET_EXPORT GeographyLogicalType : public LogicalType {
+ public:
   static std::shared_ptr<const LogicalType> Make(
       std::string crs = "",
-      LogicalType::GeometryEdges::edges edges = GeometryEdges::PLANAR);
+      LogicalType::GeometryEdges::edges edges = GeometryEdges::SPHERICAL);
 
   const std::string& crs() const;
   LogicalType::GeometryEdges::edges edges() const;
 
  private:
-  GeometryLogicalType() = default;
+  GeographyLogicalType() = default;
 };
 
 /// \brief Allowed for any physical type.
