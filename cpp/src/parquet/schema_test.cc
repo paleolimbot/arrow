@@ -1620,6 +1620,7 @@ TEST(TestLogicalTypeOperation, LogicalTypeSortOrder) {
       {LogicalType::UUID(), SortOrder::UNSIGNED},
       {LogicalType::Float16(), SortOrder::SIGNED},
       {LogicalType::Geometry(), SortOrder::UNKNOWN},
+      {LogicalType::Geography(), SortOrder::UNKNOWN},
       {LogicalType::None(), SortOrder::UNKNOWN}};
 
   for (const ExpectedSortOrder& c : cases) {
