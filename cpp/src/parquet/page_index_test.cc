@@ -512,7 +512,6 @@ void TestWriteTypedColumnIndex(schema::NodePtr node,
   }
   auto descr = std::make_unique<ColumnDescriptor>(node, max_definition_level,
                                                   max_repetition_level);
-
   auto builder = ColumnIndexBuilder::Make(descr.get());
   for (size_t i = 0; i < page_stats.size(); ++i) {
     auto size_stats = build_size_stats
@@ -552,7 +551,6 @@ void TestWriteTypedColumnIndex(schema::NodePtr node,
       if (has_null_counts) {
         ASSERT_EQ(page_stats[i].null_count, column_index->null_counts()[i]);
       }
-
       if (build_size_stats) {
         ASSERT_NO_FATAL_FAILURE(VerifyPageLevelHistogram(
             i, page_levels[i].def_levels, column_index->definition_level_histograms()));
