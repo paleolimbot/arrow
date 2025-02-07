@@ -318,6 +318,42 @@ cdef class GeospatialStatistics(_Weakrefable):
     def __cinit__(self):
         pass
 
+    def __repr__(self):
+        return """{}
+  geospatial_types: {}
+  xmin: {}
+  xmax: {}
+  ymin: {}
+  ymax: {}
+  zmin: {}
+  zmax: {}
+  mmin: {}
+  mmax: {}""".format(object.__repr__(self),
+                     self.geospatial_types,
+                     self.xmin, self.xmax,
+                     self.ymin, self.ymax,
+                     self.zmin, self.zmax,
+                     self.mmin, self.mmax)
+
+    def to_dict(self):
+        out = {
+            "geospatial_types": self.geospatial_types,
+            "xmin": self.xmin,
+            "xmax": self.xmax,
+            "ymin": self.ymin,
+            "ymax": self.ymax,
+            "zmin": self.zmin,
+            "zmax": self.zmax,
+            "mmin": self.mmin,
+            "mmax": self.mmax
+        }
+
+        return out
+
+    @property
+    def geospatial_types(self):
+        return list(self.statistics.geospatial_types)
+
     @property
     def xmin(self):
         return self.statistics.xmin
@@ -336,23 +372,31 @@ cdef class GeospatialStatistics(_Weakrefable):
 
     @property
     def zmin(self):
-        return self.statistics.xmin
+        if self.statistics.has_z():
+            return self.statistics.xmin
+        else:
+            return None
 
     @property
     def zmax(self):
-        return self.statistics.xmax
+        if self.statistics.has_z():
+            return self.statistics.xmax
+        else:
+            return None
 
     @property
     def mmin(self):
-        return self.statistics.mmin
+        if self.statistics.has_m():
+            return self.statistics.mmin
+        else:
+            return None
 
     @property
     def mmax(self):
-        return self.statistics.mmax
-
-    @property
-    def geospatial_types(self):
-        return list(self.statistics.geospatial_types)
+        if self.statistics.has_m():
+            return self.statistics.mmax
+        else:
+            return None
 
 
 cdef class ColumnChunkMetaData(_Weakrefable):
@@ -363,6 +407,7 @@ cdef class ColumnChunkMetaData(_Weakrefable):
 
     def __repr__(self):
         statistics = indent(repr(self.statistics), 4 * ' ')
+        geospatial_statistics = indent(repr(self.geospatial_statistics), 4 * ' ')
         return """{0}
   file_offset: {1}
   file_path: {2}
@@ -372,13 +417,15 @@ cdef class ColumnChunkMetaData(_Weakrefable):
   is_stats_set: {6}
   statistics:
 {7}
-  compression: {8}
-  encodings: {9}
-  has_dictionary_page: {10}
-  dictionary_page_offset: {11}
-  data_page_offset: {12}
-  total_compressed_size: {13}
-  total_uncompressed_size: {14}""".format(object.__repr__(self),
+  geospatial_statistics:
+{8}
+  compression: {9}
+  encodings: {10}
+  has_dictionary_page: {11}
+  dictionary_page_offset: {12}
+  data_page_offset: {13}
+  total_compressed_size: {14}
+  total_uncompressed_size: {15}""".format(object.__repr__(self),
                                           self.file_offset,
                                           self.file_path,
                                           self.physical_type,
@@ -386,6 +433,7 @@ cdef class ColumnChunkMetaData(_Weakrefable):
                                           self.path_in_schema,
                                           self.is_stats_set,
                                           statistics,
+                                          geospatial_statistics,
                                           self.compression,
                                           self.encodings,
                                           self.has_dictionary_page,
@@ -404,6 +452,7 @@ cdef class ColumnChunkMetaData(_Weakrefable):
             Dictionary with a key for each attribute of this class.
         """
         statistics = self.statistics.to_dict() if self.is_stats_set else None
+        geospatial_statistics = self.geospatial_statistics.to_dict() if self.is_geometry_stats_set else None
         d = dict(
             file_offset=self.file_offset,
             file_path=self.file_path,
@@ -412,6 +461,7 @@ cdef class ColumnChunkMetaData(_Weakrefable):
             path_in_schema=self.path_in_schema,
             is_stats_set=self.is_stats_set,
             statistics=statistics,
+            geospatial_statistics=geospatial_statistics,
             compression=self.compression,
             encodings=self.encodings,
             has_dictionary_page=self.has_dictionary_page,
