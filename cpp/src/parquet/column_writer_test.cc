@@ -407,9 +407,7 @@ class TestPrimitiveWriter : public PrimitiveTypedTest<TestType> {
     return ColumnChunkMetaData::Make(metadata_->contents(), this->descr_);
   }
 
-  EncodedStatistics metadata_encoded_stats() {
-    return metadata_stats()->Encode();
-  }
+  EncodedStatistics metadata_encoded_stats() { return metadata_stats()->Encode(); }
 
   std::shared_ptr<Statistics> metadata_stats() {
     return metadata_accessor()->statistics();

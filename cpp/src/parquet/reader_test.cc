@@ -1871,10 +1871,9 @@ class TestGeometryLogicalType : public ::testing::Test {
                      bool enable_write_page_index, bool write_arrow) {
     // Make schema
     schema::NodeVector fields;
-    fields.push_back(PrimitiveNode::Make(
-        "g", Repetition::REQUIRED,
-        GeometryLogicalType::Make("srid:1234"),
-        Type::BYTE_ARRAY));
+    fields.push_back(PrimitiveNode::Make("g", Repetition::REQUIRED,
+                                         GeometryLogicalType::Make("srid:1234"),
+                                         Type::BYTE_ARRAY));
     auto schema = std::static_pointer_cast<GroupNode>(
         GroupNode::Make("schema", Repetition::REQUIRED, fields));
 

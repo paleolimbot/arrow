@@ -225,14 +225,15 @@ void GeospatialStatistics::Merge(const GeospatialStatistics& other) {
 }
 
 void GeospatialStatistics::Update(const ByteArray* values, int64_t num_values,
-                                int64_t null_count) {
+                                  int64_t null_count) {
   impl_->Update(values, num_values, null_count);
 }
 
-void GeospatialStatistics::UpdateSpaced(const ByteArray* values, const uint8_t* valid_bits,
-                                      int64_t valid_bits_offset,
-                                      int64_t num_spaced_values, int64_t num_values,
-                                      int64_t null_count) {
+void GeospatialStatistics::UpdateSpaced(const ByteArray* values,
+                                        const uint8_t* valid_bits,
+                                        int64_t valid_bits_offset,
+                                        int64_t num_spaced_values, int64_t num_values,
+                                        int64_t null_count) {
   impl_->UpdateSpaced(values, valid_bits, valid_bits_offset, num_spaced_values,
                       num_values, null_count);
 }
@@ -243,7 +244,9 @@ void GeospatialStatistics::Reset() { impl_->Reset(); }
 
 bool GeospatialStatistics::is_valid() const { return impl_->is_valid(); }
 
-EncodedGeospatialStatistics GeospatialStatistics::Encode() const { return impl_->Encode(); }
+EncodedGeospatialStatistics GeospatialStatistics::Encode() const {
+  return impl_->Encode();
+}
 
 std::string GeospatialStatistics::EncodeMin() const { return impl_->EncodeMin(); }
 
