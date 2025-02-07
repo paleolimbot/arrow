@@ -1544,11 +1544,15 @@ TEST(TestLogicalTypeOperation, LogicalTypeRepresentation) {
       {LogicalType::BSON(), "BSON", R"({"Type": "BSON"})"},
       {LogicalType::UUID(), "UUID", R"({"Type": "UUID"})"},
       {LogicalType::Float16(), "Float16", R"({"Type": "Float16"})"},
-      {LogicalType::Geometry(), "Geometry(crs=, edges=planar, encoding=wkb)",
-       R"({"Type": "Geometry", "edges": "planar", "encoding": "wkb"})"},
-      {LogicalType::Geometry("{}", LogicalType::GeometryEdges::SPHERICAL),
-       "Geometry(crs={}, edges=spherical, encoding=wkb)",
-       R"({"Type": "Geometry", "crs": {}, "edges": "spherical", "encoding": "wkb"})"},
+      {LogicalType::Geometry(), "Geography(crs=, edges=spherical)",
+       R"({"Type": "Geometry", "edges": "spherical")"},
+      {LogicalType::Geometry("srid:1234"), "Geometry(crs=srid:1234)",
+       R"({"Type": "Geometry", "crs": "srid:1234"})"},
+      {LogicalType::Geography(), "Geography(crs=, edges=spherical)",
+       R"({"Type": "Geography", "edges": "spherical")"},
+      {LogicalType::Geography("srid:1234", LogicalType::GeometryEdges::SPHERICAL),
+       "Geography(crs=srid:1234, edges=spherical)",
+       R"({"Type": "Geography", "crs": "srid:1234", "edges": "spherical"})"},
       {LogicalType::None(), "None", R"({"Type": "None"})"},
   };
 
@@ -2272,8 +2276,9 @@ TEST(TestLogicalTypeSerialization, Roundtrips) {
       {LogicalType::UUID(), Type::FIXED_LEN_BYTE_ARRAY, 16},
       {LogicalType::Float16(), Type::FIXED_LEN_BYTE_ARRAY, 2},
       {LogicalType::Geometry(), Type::BYTE_ARRAY, -1},
-      {LogicalType::Geometry("non-empty crs", LogicalType::GeometryEdges::SPHERICAL,
-                             LogicalType::GeometryEncoding::WKB),
+      {LogicalType::Geometry("srid:1234"), Type::BYTE_ARRAY, -1},
+      {LogicalType::Geography(), Type::BYTE_ARRAY, -1},
+      {LogicalType::Geography("srid:1234", LogicalType::GeometryEdges::SPHERICAL),
        Type::BYTE_ARRAY, -1},
       {LogicalType::None(), Type::BOOLEAN, -1}};
 

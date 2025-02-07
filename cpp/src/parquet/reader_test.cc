@@ -1873,8 +1873,7 @@ class TestGeometryLogicalType : public ::testing::Test {
     schema::NodeVector fields;
     fields.push_back(PrimitiveNode::Make(
         "g", Repetition::REQUIRED,
-        GeometryLogicalType::Make("OGC:CRS84", LogicalType::GeometryEdges::PLANAR,
-                                  LogicalType::GeometryEncoding::WKB),
+        GeometryLogicalType::Make("srid:1234"),
         Type::BYTE_ARRAY));
     auto schema = std::static_pointer_cast<GroupNode>(
         GroupNode::Make("schema", Repetition::REQUIRED, fields));
