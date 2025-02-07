@@ -168,8 +168,15 @@ class PARQUET_EXPORT LogicalType {
     enum unit { UNKNOWN = 0, MILLIS = 1, MICROS, NANOS };
   };
 
-  struct GeometryEdges {
-    enum edges { UNKNOWN = 0, SPHERICAL = 1 };
+  struct EdgeInterpolationAlgorithm {
+    enum edges {
+      UNKNOWN = 0,
+      SPHERICAL = 1,
+      VINCENTY = 2,
+      THOMAS = 3,
+      ANDOYER = 4,
+      KARNEY = 5
+    };
   };
 
   /// \brief If possible, return a logical type equivalent to the given legacy
@@ -223,7 +230,7 @@ class PARQUET_EXPORT LogicalType {
 
   static std::shared_ptr<const LogicalType> Geography(
       std::string crs = "",
-      LogicalType::GeometryEdges::edges edges = GeometryEdges::SPHERICAL);
+      LogicalType::EdgeInterpolationAlgorithm::edges edges = EdgeInterpolationAlgorithm::SPHERICAL);
 
   /// \brief Create a placeholder for when no logical type is specified
   static std::shared_ptr<const LogicalType> None();
@@ -474,10 +481,10 @@ class PARQUET_EXPORT GeographyLogicalType : public LogicalType {
  public:
   static std::shared_ptr<const LogicalType> Make(
       std::string crs = "",
-      LogicalType::GeometryEdges::edges edges = GeometryEdges::SPHERICAL);
+      LogicalType::EdgeInterpolationAlgorithm::edges edges = EdgeInterpolationAlgorithm::SPHERICAL);
 
   const std::string& crs() const;
-  LogicalType::GeometryEdges::edges edges() const;
+  LogicalType::EdgeInterpolationAlgorithm::edges edges() const;
 
  private:
   GeographyLogicalType() = default;
