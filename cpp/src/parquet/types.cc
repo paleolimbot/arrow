@@ -1670,7 +1670,7 @@ GENERATE_MAKE(Float16)
 
 namespace {
 
-static inline const char* geometry_edges_string(
+static inline const char* geometry_algorithm_string(
     LogicalType::EdgeInterpolationAlgorithm::algorithm algorithm) {
   switch (algorithm) {
     case LogicalType::EdgeInterpolationAlgorithm::SPHERICAL:
@@ -1775,23 +1775,29 @@ class LogicalType::Impl::Geography final : public LogicalType::Impl::Incompatibl
   bool Equals(const LogicalType& other) const override;
 
   const std::string& crs() const { return crs_; }
-  LogicalType::EdgeInterpolationAlgorithm::algorithm algorithm() const { return edges_; }
+  LogicalType::EdgeInterpolationAlgorithm::algorithm algorithm() const {
+    return algorithm_;
+  }
+
+  const std::string& algorithm_name() const {
+    return geometry_algorithm_string(algorithm_);
+  }
 
  private:
   Geography(std::string crs, LogicalType::EdgeInterpolationAlgorithm::algorithm algorithm)
       : LogicalType::Impl(LogicalType::Type::GEOGRAPHY, SortOrder::UNKNOWN),
         LogicalType::Impl::SimpleApplicable(parquet::Type::BYTE_ARRAY),
         crs_(std::move(crs)),
-        edges_(algorithm) {}
+        algorithm_(algorithm) {}
 
   std::string crs_;
-  LogicalType::EdgeInterpolationAlgorithm::algorithm edges_;
+  LogicalType::EdgeInterpolationAlgorithm::algorithm algorithm_;
 };
 
 std::string LogicalType::Impl::Geography::ToString() const {
   std::stringstream type;
-  type << "Geography(crs=" << crs_ << ", algorithm=" << geometry_edges_string(edges_)
-       << ")";
+  type << "Geography(crs=" << crs_
+       << ", algorithm=" << geometry_algorithm_string(algorithm_) << ")";
   return type.str();
 }
 
@@ -1806,8 +1812,8 @@ std::string LogicalType::Impl::Geography::ToJSON() const {
     json << R"(, "crs": ")" << crs_ << R"(")";
   }
 
-  if (edges_ != LogicalType::EdgeInterpolationAlgorithm::SPHERICAL) {
-    json << R"(, "algorithm": ")" << geometry_edges_string(edges_) << R"(")";
+  if (algorithm_ != LogicalType::EdgeInterpolationAlgorithm::SPHERICAL) {
+    json << R"(, "algorithm": ")" << geometry_algorithm_string(algorithm_) << R"(")";
   }
 
   json << "}";
@@ -1823,18 +1829,18 @@ format::LogicalType LogicalType::Impl::Geography::ToThrift() const {
     geography_type.__set_crs(crs_);
   }
 
-  if (edges_ == LogicalType::EdgeInterpolationAlgorithm::SPHERICAL) {
+  if (algorithm_ == LogicalType::EdgeInterpolationAlgorithm::SPHERICAL) {
     // Canonically export spherical algorithm as unset
-  } else if (edges_ == LogicalType::EdgeInterpolationAlgorithm::VINCENTY) {
+  } else if (algorithm_ == LogicalType::EdgeInterpolationAlgorithm::VINCENTY) {
     geography_type.__set_algorithm(format::EdgeInterpolationAlgorithm::VINCENTY);
-  } else if (edges_ == LogicalType::EdgeInterpolationAlgorithm::THOMAS) {
+  } else if (algorithm_ == LogicalType::EdgeInterpolationAlgorithm::THOMAS) {
     geography_type.__set_algorithm(format::EdgeInterpolationAlgorithm::THOMAS);
-  } else if (edges_ == LogicalType::EdgeInterpolationAlgorithm::ANDOYER) {
+  } else if (algorithm_ == LogicalType::EdgeInterpolationAlgorithm::ANDOYER) {
     geography_type.__set_algorithm(format::EdgeInterpolationAlgorithm::ANDOYER);
-  } else if (edges_ == LogicalType::EdgeInterpolationAlgorithm::KARNEY) {
+  } else if (algorithm_ == LogicalType::EdgeInterpolationAlgorithm::KARNEY) {
     geography_type.__set_algorithm(format::EdgeInterpolationAlgorithm::KARNEY);
   } else {
-    throw ParquetException("Unknown value for geometry algorithm: ", edges_);
+    throw ParquetException("Unknown value for geometry algorithm: ", algorithm_);
   }
 
   type.__set_GEOGRAPHY(geography_type);
@@ -1857,6 +1863,10 @@ const std::string& GeographyLogicalType::crs() const {
 LogicalType::EdgeInterpolationAlgorithm::algorithm GeographyLogicalType::algorithm()
     const {
   return (dynamic_cast<const LogicalType::Impl::Geography&>(*impl_)).algorithm();
+}
+
+const std::string& GeographyLogicalType::algorithm_name() const {
+  return (dynamic_cast<const LogicalType::Impl::Geography&>(*impl_)).algorithm_name();
 }
 
 std::shared_ptr<const LogicalType> GeographyLogicalType::Make(
