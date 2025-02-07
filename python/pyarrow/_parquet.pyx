@@ -312,6 +312,13 @@ cdef _box_flba(ParquetFLBA val, uint32_t len):
     return cp.PyBytes_FromStringAndSize(<char*> val.ptr, <Py_ssize_t> len)
 
 
+cdef class GeospatialStatistics(_Weakrefable):
+    """Statistics for columns with geospatial data types"""
+
+    def __cinit__(self):
+        pass
+
+
 cdef class ColumnChunkMetaData(_Weakrefable):
     """Column metadata for a single row group."""
 
@@ -439,6 +446,15 @@ cdef class ColumnChunkMetaData(_Weakrefable):
         statistics = Statistics()
         statistics.init(self.metadata.statistics(), self)
         return statistics
+
+    @property
+    def geospatial_statistics(self):
+        if not self.metadata.is_geometry_stats_set():
+            return None
+
+        geospatial_statistics = GeospatialStatistics()
+        geospatial_statistics.init(self.metadata.geometry_statistics(), self)
+        return geospatial_statistics
 
     @property
     def compression(self):

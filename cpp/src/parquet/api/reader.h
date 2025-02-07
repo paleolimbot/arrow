@@ -27,6 +27,7 @@
 #include "parquet/printer.h"
 #include "parquet/properties.h"
 #include "parquet/statistics.h"
+#include "parquet/geometry_statistics.h"
 
 // Schemas
 #include "parquet/api/schema.h"

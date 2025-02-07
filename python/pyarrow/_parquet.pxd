@@ -690,6 +690,16 @@ cdef class Statistics(_Weakrefable):
         self.statistics = statistics
         self.parent = parent
 
+cdef class GeospatialStatistics(_Weakrefable):
+    cdef:
+        CParquetEncodedGeospatialStatistics statistics
+        ColumnChunkMetaData parent
+
+    cdef inline init(self, const shared_ptr[CParquetGeospatialStatistics]& statistics,
+                     ColumnChunkMetaData parent):
+        self.statistics = statistics.get().Encode()
+        self.parent = parent
+
 cdef extern from "parquet/encryption/encryption.h" namespace "parquet" nogil:
     cdef cppclass CFileDecryptionProperties\
             " parquet::FileDecryptionProperties":
