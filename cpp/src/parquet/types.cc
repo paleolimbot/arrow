@@ -494,7 +494,8 @@ std::shared_ptr<const LogicalType> LogicalType::FromThrift(
 
     LogicalType::EdgeInterpolationAlgorithm::edges edges =
         LogicalType::EdgeInterpolationAlgorithm::UNKNOWN;
-    if (type.GEOGRAPHY.algorithm == format::EdgeInterpolationAlgorithm::SPHERICAL) {
+    if (!type.GEOGRAPHY.__isset.algorithm ||
+        type.GEOGRAPHY.algorithm == format::EdgeInterpolationAlgorithm::SPHERICAL) {
       edges = LogicalType::EdgeInterpolationAlgorithm::SPHERICAL;
     } else if (type.GEOGRAPHY.algorithm == format::EdgeInterpolationAlgorithm::VINCENTY) {
       edges = LogicalType::EdgeInterpolationAlgorithm::VINCENTY;
@@ -1804,7 +1805,9 @@ std::string LogicalType::Impl::Geography::ToJSON() const {
     json << R"(, "crs": ")" << crs_ << R"(")";
   }
 
-  json << R"(, "edges": ")" << geometry_edges_string(edges_) << R"(")";
+  if (edges_ != LogicalType::EdgeInterpolationAlgorithm::SPHERICAL) {
+    json << R"(, "edges": ")" << geometry_edges_string(edges_) << R"(")";
+  }
 
   json << "}";
   return json.str();
@@ -1820,7 +1823,7 @@ format::LogicalType LogicalType::Impl::Geography::ToThrift() const {
   }
 
   if (edges_ == LogicalType::EdgeInterpolationAlgorithm::SPHERICAL) {
-    geography_type.__set_algorithm(format::EdgeInterpolationAlgorithm::SPHERICAL);
+    // Canonically export spherical edges as unset
   } else if (edges_ == LogicalType::EdgeInterpolationAlgorithm::VINCENTY) {
     geography_type.__set_algorithm(format::EdgeInterpolationAlgorithm::VINCENTY);
   } else if (edges_ == LogicalType::EdgeInterpolationAlgorithm::THOMAS) {
