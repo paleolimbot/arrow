@@ -1668,28 +1668,6 @@ class LogicalType::Impl::Float16 final : public LogicalType::Impl::Incompatible,
 
 GENERATE_MAKE(Float16)
 
-namespace {
-
-static inline const char* geometry_algorithm_string(
-    LogicalType::EdgeInterpolationAlgorithm::algorithm algorithm) {
-  switch (algorithm) {
-    case LogicalType::EdgeInterpolationAlgorithm::SPHERICAL:
-      return "spherical";
-    case LogicalType::EdgeInterpolationAlgorithm::VINCENTY:
-      return "vincenty";
-    case LogicalType::EdgeInterpolationAlgorithm::THOMAS:
-      return "thomas";
-    case LogicalType::EdgeInterpolationAlgorithm::ANDOYER:
-      return "andoyer";
-    case LogicalType::EdgeInterpolationAlgorithm::KARNEY:
-      return "karney";
-    default:
-      return "unknown";
-  }
-}
-
-}  // namespace
-
 class LogicalType::Impl::Geometry final : public LogicalType::Impl::Incompatible,
                                           public LogicalType::Impl::SimpleApplicable {
  public:
@@ -1779,8 +1757,21 @@ class LogicalType::Impl::Geography final : public LogicalType::Impl::Incompatibl
     return algorithm_;
   }
 
-  const std::string& algorithm_name() const {
-    return geometry_algorithm_string(algorithm_);
+  const char* algorithm_name() const {
+    switch (algorithm_) {
+      case LogicalType::EdgeInterpolationAlgorithm::SPHERICAL:
+        return "spherical";
+      case LogicalType::EdgeInterpolationAlgorithm::VINCENTY:
+        return "vincenty";
+      case LogicalType::EdgeInterpolationAlgorithm::THOMAS:
+        return "thomas";
+      case LogicalType::EdgeInterpolationAlgorithm::ANDOYER:
+        return "andoyer";
+      case LogicalType::EdgeInterpolationAlgorithm::KARNEY:
+        return "karney";
+      default:
+        return "unknown";
+    }
   }
 
  private:
@@ -1796,8 +1787,7 @@ class LogicalType::Impl::Geography final : public LogicalType::Impl::Incompatibl
 
 std::string LogicalType::Impl::Geography::ToString() const {
   std::stringstream type;
-  type << "Geography(crs=" << crs_
-       << ", algorithm=" << geometry_algorithm_string(algorithm_) << ")";
+  type << "Geography(crs=" << crs_ << ", algorithm=" << algorithm_name() << ")";
   return type.str();
 }
 
@@ -1813,7 +1803,7 @@ std::string LogicalType::Impl::Geography::ToJSON() const {
   }
 
   if (algorithm_ != LogicalType::EdgeInterpolationAlgorithm::SPHERICAL) {
-    json << R"(, "algorithm": ")" << geometry_algorithm_string(algorithm_) << R"(")";
+    json << R"(, "algorithm": ")" << algorithm_name() << R"(")";
   }
 
   json << "}";
@@ -1865,7 +1855,7 @@ LogicalType::EdgeInterpolationAlgorithm::algorithm GeographyLogicalType::algorit
   return (dynamic_cast<const LogicalType::Impl::Geography&>(*impl_)).algorithm();
 }
 
-const std::string& GeographyLogicalType::algorithm_name() const {
+const char* GeographyLogicalType::algorithm_name() const {
   return (dynamic_cast<const LogicalType::Impl::Geography&>(*impl_)).algorithm_name();
 }
 
