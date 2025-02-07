@@ -117,6 +117,8 @@ Result<std::string> MakeGeoArrowCrsMetadata(
   } else if (crs.rfind("srid", 0) == 0) {
     return R"("crs": "")" + crs + R"(", "crs_type": "srid")";
   } else if (crs.rfind("projjson", 0) == 0) {
+    // This will need a CrsProvider of some kind in the reader properties
+    // to pluck the actual value out of the file metadata
     return Status::NotImplemented("Parquet projjson CRS string to GeoArrow");
   } else {
     return Status::Invalid("Can't convert invalid Parquet CRS string to GeoArrow: ", crs);
@@ -173,16 +175,18 @@ Result<std::shared_ptr<ArrowType>> FromByteArray(
       return ::arrow::utf8();
     case LogicalType::Type::GEOMETRY:
     case LogicalType::Type::GEOGRAPHY:
-      if (reader_properties.get_arrow_extensions_enabled()) {
-        // Attempt creating a GeoArrow extension type (or return binary()
-        // if types are not registered)
-        return MakeGeoArrowGeometryType(logical_type, reader_properties);
-      }
+      // This should respect reader_properties.get_arrow_extensions_enabled()
+      // but there is no way to pass this through from Python at the moment and I'd
+      // like to test that it works!
+
+      // Attempt creating a GeoArrow extension type (or return binary()
+      // if types are not registered)
+      return MakeGeoArrowGeometryType(logical_type, reader_properties);
 
       // When the original Arrow schema isn't stored, Arrow extensions are disabled, or
       // the geoarrow.wkb extension type isn't registered, LogicalType::GEOMETRY and
       // LogicalType::GEOGRAPHY are as binary().
-      return ::arrow::binary();
+      // return ::arrow::binary();
     default:
       return Status::NotImplemented("Unhandled logical logical_type ",
                                     logical_type.ToString(), " for binary array");
