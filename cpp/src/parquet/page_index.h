@@ -19,7 +19,6 @@
 
 #include "arrow/io/interfaces.h"
 #include "parquet/encryption/type_fwd.h"
-#include "parquet/metadata.h"
 #include "parquet/type_fwd.h"
 #include "parquet/types.h"
 
@@ -27,9 +26,6 @@
 #include <vector>
 
 namespace parquet {
-
-class EncodedStatistics;
-struct PageIndexLocation;
 
 /// \brief ColumnIndex is a proxy around format::ColumnIndex.
 class PARQUET_EXPORT ColumnIndex {
