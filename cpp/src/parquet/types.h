@@ -159,16 +159,13 @@ class PARQUET_EXPORT LogicalType {
       UUID,
       FLOAT16,
       GEOMETRY,
+      GEOGRAPHY,
       NONE  // Not a real logical type; should always be last element
     };
   };
 
   struct TimeUnit {
     enum unit { UNKNOWN = 0, MILLIS = 1, MICROS, NANOS };
-  };
-
-  struct GeometryEncoding {
-    enum geometry_encoding { UNKNOWN = 0, WKB = 1 };
   };
 
   struct GeometryEdges {
@@ -224,8 +221,7 @@ class PARQUET_EXPORT LogicalType {
 
   static std::shared_ptr<const LogicalType> Geometry(
       std::string crs = "",
-      LogicalType::GeometryEdges::edges edges = GeometryEdges::PLANAR,
-      LogicalType::GeometryEncoding::geometry_encoding encoding = GeometryEncoding::WKB);
+      LogicalType::GeometryEdges::edges edges = GeometryEdges::PLANAR);
 
   /// \brief Create a placeholder for when no logical type is specified
   static std::shared_ptr<const LogicalType> None();
@@ -465,12 +461,10 @@ class PARQUET_EXPORT GeometryLogicalType : public LogicalType {
  public:
   static std::shared_ptr<const LogicalType> Make(
       std::string crs = "",
-      LogicalType::GeometryEdges::edges edges = GeometryEdges::PLANAR,
-      LogicalType::GeometryEncoding::geometry_encoding encoding = GeometryEncoding::WKB);
+      LogicalType::GeometryEdges::edges edges = GeometryEdges::PLANAR);
 
   const std::string& crs() const;
   LogicalType::GeometryEdges::edges edges() const;
-  LogicalType::GeometryEncoding::geometry_encoding encoding() const;
 
  private:
   GeometryLogicalType() = default;
