@@ -318,6 +318,42 @@ cdef class GeospatialStatistics(_Weakrefable):
     def __cinit__(self):
         pass
 
+    @property
+    def xmin(self):
+        return self.statistics.xmin
+
+    @property
+    def xmax(self):
+        return self.statistics.xmax
+
+    @property
+    def ymin(self):
+        return self.statistics.ymin
+
+    @property
+    def ymax(self):
+        return self.statistics.ymax
+
+    @property
+    def zmin(self):
+        return self.statistics.xmin
+
+    @property
+    def zmax(self):
+        return self.statistics.xmax
+
+    @property
+    def mmin(self):
+        return self.statistics.mmin
+
+    @property
+    def mmax(self):
+        return self.statistics.mmax
+
+    @property
+    def geospatial_types(self):
+        return list(self.statistics.geospatial_types)
+
 
 cdef class ColumnChunkMetaData(_Weakrefable):
     """Column metadata for a single row group."""
@@ -448,10 +484,15 @@ cdef class ColumnChunkMetaData(_Weakrefable):
         return statistics
 
     @property
+    def is_geometry_stats_set(self):
+        """Whether or not geometry statistics are present in metadata (bool)."""
+        return self.metadata.is_geometry_stats_set()
+
+    @property
     def geospatial_statistics(self):
+        """Statistics for column chunk (:class:`GeospatialStatistics`)."""
         if not self.metadata.is_geometry_stats_set():
             return None
-
         geospatial_statistics = GeospatialStatistics()
         geospatial_statistics.init(self.metadata.geometry_statistics(), self)
         return geospatial_statistics
