@@ -269,16 +269,14 @@ Result<std::string> GeospatialGeoArrowCrsToParquetCrs(
 
   const auto& json_crs = document["crs"];
   if (json_crs.IsString() && crs_type == "srid") {
+    // srid is an application-specific identifier. GeoArrow lets this be propagated via
+    // "crs_type": "srid".
     return std::string("srid:") + json_crs.GetString();
-  } else if (json_crs == "EPSG:4326" || json_crs == "OGC:CRS84") {
+  } else if (json_crs.IsString() && (json_crs == "EPSG:4326" || json_crs == "OGC:CRS84")) {
     // crs can be left empty because these cases both correspond to
     // longitude/latitude in WGS84 according to the Parquet specification
     return "";
   } else if (json_crs.IsObject()) {
-    rj::StringBuffer buffer;
-    rj::Writer<rj::StringBuffer> writer(buffer);
-    document.Accept(writer);
-
     if (json_crs.HasMember("id")) {
       const auto& identifier = json_crs["id"];
       if (identifier.HasMember("authority") && identifier.HasMember("code")) {
@@ -295,6 +293,9 @@ Result<std::string> GeospatialGeoArrowCrsToParquetCrs(
     // TODO(paleolimbot) this is not quite correct because we're supposed to put this
     // in the metadata according to the spec. We need to find a way to put
     // this in the arrow_properties/file metadata via a CrsProvider or something.
+    rj::StringBuffer buffer;
+    rj::Writer<rj::StringBuffer> writer(buffer);
+    document.Accept(writer);
     return std::string("projjson:") + buffer.GetString();
   } else {
     // e.g., authority:code, WKT2, arbitrary string. A pluggable CrsProvider

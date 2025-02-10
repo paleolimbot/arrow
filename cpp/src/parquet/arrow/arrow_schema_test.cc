@@ -1011,7 +1011,7 @@ TEST_F(TestConvertParquetSchema, ParquetSchemaGeoArrowExtensions) {
   {
     // Parquet file does not contain Arrow schema.
     // If Arrow extensions are enabled and extensions are registered,
-    // fields will be interpreted as geoarrow_wkb(utf8()) extension fields.
+    // fields will be interpreted as geoarrow_wkb(binary()) extension fields.
     ::arrow::ExtensionTypeGuard guard(geoarrow_wkb());
 
     ArrowReaderProperties props;
@@ -1046,7 +1046,8 @@ class TestConvertArrowSchema : public ::testing::Test {
     for (int i = 0; i < expected_schema_node->field_count(); i++) {
       auto lhs = result_schema_node->field(i);
       auto rhs = expected_schema_node->field(i);
-      EXPECT_TRUE(lhs->Equals(rhs.get()));
+      EXPECT_TRUE(lhs->Equals(rhs.get()))
+          << lhs->logical_type()->ToString() << " != " << rhs->logical_type()->ToString();
     }
   }
 
@@ -1282,6 +1283,48 @@ TEST_F(TestConvertArrowSchema, ParquetFlatPrimitivesAsDictionaries) {
   ASSERT_OK(ConvertSchema(arrow_fields));
 
   ASSERT_NO_FATAL_FAILURE(CheckFlatSchema(parquet_fields));
+}
+
+TEST_F(TestConvertArrowSchema, ParquetGeoArrowCrsLonLat) {
+  // All the Arrow Schemas below should convert to the type defaults for GEOMETRY
+  // and GEOGRAPHY when GeoArrow extension types are registered.
+  ::arrow::ExtensionTypeGuard guard(geoarrow_wkb());
+
+  ArrowWriterProperties::Builder builder;
+  builder.write_geospatial_logical_types();
+  auto arrow_properties = builder.build();
+
+  std::vector<NodePtr> parquet_fields;
+  parquet_fields.push_back(PrimitiveNode::Make("geometry", Repetition::OPTIONAL,
+                                               LogicalType::Geometry(),
+                                               ParquetType::BYTE_ARRAY));
+  parquet_fields.push_back(PrimitiveNode::Make("geography", Repetition::OPTIONAL,
+                                               LogicalType::Geography(),
+                                               ParquetType::BYTE_ARRAY));
+
+  // There are several ways that longitude/latitude could be specified when coming from
+  // GeoArrow, which allows null, missing, arbitrary strings (e.g., Authority:Code), and
+  // PROJJSON.
+  std::vector<std::string> geoarrow_lonlat = {
+      "null", R"("OGC:CRS84")", R"("EPSG:4326")",
+      // Purely the parts of the PROJJSON that we inspect to check the lon/lat case
+      R"({"id": {"authority": "OGC", "code": "CRS84"}})",
+      R"({"id": {"authority": "EPSG", "code": 4327}})"};
+
+  std::string geoarrow_lonlatish_crs = geoarrow_lonlat[0];
+  for (const auto& geoarrow_lonlatish_crs : geoarrow_lonlat) {
+    SCOPED_TRACE(geoarrow_lonlatish_crs);
+    std::vector<std::shared_ptr<Field>> arrow_fields = {
+        ::arrow::field("geometry",
+                       geoarrow_wkb(R"({"crs": )" + geoarrow_lonlatish_crs + "}"), true),
+        ::arrow::field("geography",
+                       geoarrow_wkb(R"({"crs": )" + geoarrow_lonlatish_crs +
+                                    R"(, "edges": "spherical"})"),
+                       true)};
+
+    ASSERT_OK(ConvertSchema(arrow_fields, arrow_properties));
+    ASSERT_NO_FATAL_FAILURE(CheckFlatSchema(parquet_fields));
+  }
 }
 
 TEST_F(TestConvertArrowSchema, ParquetLists) {
