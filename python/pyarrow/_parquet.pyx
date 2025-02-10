@@ -2151,7 +2151,7 @@ cdef shared_ptr[ArrowWriterProperties] _create_arrow_writer_properties(
         allow_truncated_timestamps=False,
         writer_engine_version=None,
         use_compliant_nested_type=True,
-        store_schema=True
+        store_schema=True,
         write_geospatial_logical_types=False) except *:
     """Arrow writer properties"""
     cdef:

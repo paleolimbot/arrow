@@ -874,11 +874,11 @@ cdef class ParquetFragmentScanOptions(FragmentScanOptions):
 
     @property
     def arrow_extensions_enabled(self):
-        return self.reader_properties().arrow_extensions_enabled
+        return self.arrow_reader_properties().get_arrow_extensions_enabled()
 
     @arrow_extensions_enabled.setter
     def arrow_extensions_enabled(self, bint arrow_extensions_enabled):
-        self.reader_properties.set_arrow_extensions_enabled(arrow_extensions_enabled)
+        self.arrow_reader_properties().set_arrow_extensions_enabled(arrow_extensions_enabled)
 
     def equals(self, ParquetFragmentScanOptions other):
         """
