@@ -2147,7 +2147,8 @@ cdef shared_ptr[ArrowWriterProperties] _create_arrow_writer_properties(
         allow_truncated_timestamps=False,
         writer_engine_version=None,
         use_compliant_nested_type=True,
-        store_schema=True) except *:
+        store_schema=True
+        write_geospatial_logical_types=False) except *:
     """Arrow writer properties"""
     cdef:
         shared_ptr[ArrowWriterProperties] arrow_properties
@@ -2197,6 +2198,11 @@ cdef shared_ptr[ArrowWriterProperties] _create_arrow_writer_properties(
     elif writer_engine_version != "V2":
         raise ValueError("Unsupported Writer Engine Version: {0}"
                          .format(writer_engine_version))
+
+    # write_geospatial_logical_types
+
+    if write_geospatial_logical_types:
+        arrow_props.write_geospatial_logical_types()
 
     arrow_properties = arrow_props.build()
 
@@ -2280,7 +2286,8 @@ cdef class ParquetWriter(_Weakrefable):
                   write_page_index=False,
                   write_page_checksum=False,
                   sorting_columns=None,
-                  store_decimal_as_integer=False):
+                  store_decimal_as_integer=False,
+                  write_geospatial_logical_types=False):
         cdef:
             shared_ptr[WriterProperties] properties
             shared_ptr[ArrowWriterProperties] arrow_properties
@@ -2323,6 +2330,7 @@ cdef class ParquetWriter(_Weakrefable):
             writer_engine_version=writer_engine_version,
             use_compliant_nested_type=use_compliant_nested_type,
             store_schema=store_schema,
+            write_geospatial_logical_types=write_geospatial_logical_types,
         )
 
         pool = maybe_unbox_memory_pool(memory_pool)

@@ -498,6 +498,7 @@ cdef extern from "parquet/api/writer.h" namespace "parquet" nogil:
             Builder* enable_compliant_nested_types()
             Builder* disable_compliant_nested_types()
             Builder* set_engine_version(ArrowWriterEngineVersion version)
+            Builder* write_geospatial_logical_types()
             shared_ptr[ArrowWriterProperties] build()
         c_bool support_deprecated_int96_timestamps()
 
