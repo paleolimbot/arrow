@@ -272,7 +272,8 @@ Result<std::string> GeospatialGeoArrowCrsToParquetCrs(
     // srid is an application-specific identifier. GeoArrow lets this be propagated via
     // "crs_type": "srid".
     return std::string("srid:") + json_crs.GetString();
-  } else if (json_crs.IsString() && (json_crs == "EPSG:4326" || json_crs == "OGC:CRS84")) {
+  } else if (json_crs.IsString() &&
+             (json_crs == "EPSG:4326" || json_crs == "OGC:CRS84")) {
     // crs can be left empty because these cases both correspond to
     // longitude/latitude in WGS84 according to the Parquet specification
     return "";
