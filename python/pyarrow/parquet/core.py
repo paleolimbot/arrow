@@ -890,6 +890,9 @@ store_decimal_as_integer : bool, default False
     - fixed_len_byte_array: for precision > 18.
 
     As a consequence, decimal columns stored in integer types are more compact.
+write_geospatial_logical_types : bool, default False
+    Write GEOMETRY and/or GEOGRAPHY logical types when converting GeoArrow types
+    to Parquet.
 """
 
 _parquet_writer_example_doc = """\
@@ -986,6 +989,7 @@ Examples
                  write_page_checksum=False,
                  sorting_columns=None,
                  store_decimal_as_integer=False,
+                 write_geospatial_logical_types=False,
                  **options):
         if use_deprecated_int96_timestamps is None:
             # Use int96 timestamps for Spark
@@ -1039,6 +1043,7 @@ Examples
             write_page_checksum=write_page_checksum,
             sorting_columns=sorting_columns,
             store_decimal_as_integer=store_decimal_as_integer,
+            write_geospatial_logical_types=write_geospatial_logical_types,
             **options)
         self.is_open = True
 
@@ -1267,6 +1272,9 @@ page_checksum_verification : bool, default False
     If True, verify the page checksum for each page read from the file.
 use_legacy_dataset : bool, optional
     Deprecated and has no effect from PyArrow version 15.0.0.
+arrow_extensions_enabled : bool, default False
+    If True, read Parquet logical types as Arrow Extension Types where possible,
+    (e.g., JSON arrow.json).
 
 Examples
 --------
@@ -1280,6 +1288,7 @@ Examples
                  decryption_properties=None, thrift_string_size_limit=None,
                  thrift_container_size_limit=None,
                  page_checksum_verification=False,
+                 arrow_extensions_enabled=False,
                  use_legacy_dataset=None):
 
         if use_legacy_dataset is not None:
@@ -1297,6 +1306,7 @@ Examples
             "thrift_string_size_limit": thrift_string_size_limit,
             "thrift_container_size_limit": thrift_container_size_limit,
             "page_checksum_verification": page_checksum_verification,
+            "arrow_extensions_enabled": arrow_extensions_enabled,
         }
         if buffer_size:
             read_options.update(use_buffered_stream=True,
@@ -1781,7 +1791,8 @@ def read_table(source, *, columns=None, use_threads=True,
                coerce_int96_timestamp_unit=None,
                decryption_properties=None, thrift_string_size_limit=None,
                thrift_container_size_limit=None,
-               page_checksum_verification=False):
+               page_checksum_verification=False,
+               arrow_extensions_enabled=False):
 
     if use_legacy_dataset is not None:
         warnings.warn(
@@ -1806,6 +1817,7 @@ def read_table(source, *, columns=None, use_threads=True,
             thrift_string_size_limit=thrift_string_size_limit,
             thrift_container_size_limit=thrift_container_size_limit,
             page_checksum_verification=page_checksum_verification,
+            arrow_extensions_enabled=arrow_extensions_enabled,
         )
     except ImportError:
         # fall back on ParquetFile for simple cases when pyarrow.dataset
@@ -1893,6 +1905,7 @@ def write_table(table, where, row_group_size=None, version='2.6',
                 write_page_checksum=False,
                 sorting_columns=None,
                 store_decimal_as_integer=False,
+                write_geospatial_logical_types=False,
                 **kwargs):
     # Implementor's note: when adding keywords here / updating defaults, also
     # update it in write_to_dataset and _dataset_parquet.pyx ParquetFileWriteOptions
@@ -1924,6 +1937,7 @@ def write_table(table, where, row_group_size=None, version='2.6',
                 write_page_checksum=write_page_checksum,
                 sorting_columns=sorting_columns,
                 store_decimal_as_integer=store_decimal_as_integer,
+                write_geospatial_logical_types=write_geospatial_logical_types,
                 **kwargs) as writer:
             writer.write_table(table, row_group_size=row_group_size)
     except Exception:
