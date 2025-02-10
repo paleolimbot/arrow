@@ -648,6 +648,7 @@ cdef shared_ptr[ArrowWriterProperties] _create_arrow_writer_properties(
     writer_engine_version=*,
     use_compliant_nested_type=*,
     store_schema=*,
+    write_geospatial_logical_types=*,
 ) except *
 
 cdef class ParquetSchema(_Weakrefable):
