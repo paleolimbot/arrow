@@ -1696,6 +1696,9 @@ thrift_container_size_limit : int, default None
     sufficient for most Parquet files.
 page_checksum_verification : bool, default False
     If True, verify the checksum for each page read from the file.
+arrow_extensions_enabled : bool, default False
+    If True, read Parquet logical types as Arrow Extension Types where possible,
+    (e.g., JSON arrow.json).
 
 Returns
 -------
