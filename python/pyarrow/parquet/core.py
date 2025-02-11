@@ -1270,11 +1270,11 @@ thrift_container_size_limit : int, default None
     sufficient for most Parquet files.
 page_checksum_verification : bool, default False
     If True, verify the page checksum for each page read from the file.
-use_legacy_dataset : bool, optional
-    Deprecated and has no effect from PyArrow version 15.0.0.
 arrow_extensions_enabled : bool, default False
     If True, read Parquet logical types as Arrow Extension Types where possible,
     (e.g., JSON arrow.json).
+use_legacy_dataset : bool, optional
+    Deprecated and has no effect from PyArrow version 15.0.0.
 
 Examples
 --------
