@@ -386,6 +386,8 @@ class WKBGeometryBounder {
       case Dimensions::dimensions::XYZM:
         return src->ReadDoubles<XYZM>(n_coords, swap,
                                       [&](XYZM coord) { box_.UpdateXYZM(coord); });
+      default:
+        return ::arrow::Status::Invalid("Unknown dimensions");
     }
   }
 };
