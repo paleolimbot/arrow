@@ -213,7 +213,12 @@ class WKBBuffer {
 };
 
 struct BoundingBox {
-  BoundingBox(const std::array<double, 4>& mins, const std::array<double, 4>& maxes) {
+  using XY = std::array<double, 2>;
+  using XYZ = std::array<double, 3>;
+  using XYM = std::array<double, 3>;
+  using XYZM = std::array<double, 4>;
+
+  BoundingBox(const XYZM& mins, const XYZM& maxes) {
     std::memcpy(min, mins.data(), sizeof(min));
     std::memcpy(max, maxes.data(), sizeof(max));
   }
@@ -222,11 +227,11 @@ struct BoundingBox {
   BoundingBox(const BoundingBox& other) = default;
   BoundingBox& operator=(const BoundingBox&) = default;
 
-  void UpdateXY(std::array<double, 2> coord) { UpdateInternal(coord); }
+  void UpdateXY(const XY& coord) { UpdateInternal(coord); }
 
-  void UpdateXYZ(std::array<double, 3> coord) { UpdateInternal(coord); }
+  void UpdateXYZ(const XYZ& coord) { UpdateInternal(coord); }
 
-  void UpdateXYM(std::array<double, 3> coord) {
+  void UpdateXYM(const XYM& coord) {
     min[0] = std::min(min[0], coord[0]);
     min[1] = std::min(min[1], coord[1]);
     min[3] = std::min(min[3], coord[2]);
@@ -235,7 +240,7 @@ struct BoundingBox {
     max[3] = std::max(max[3], coord[2]);
   }
 
-  void UpdateXYZM(std::array<double, 4> coord) { UpdateInternal(coord); }
+  void UpdateXYZM(const XYZM& coord) { UpdateInternal(coord); }
 
   void Reset() {
     for (int i = 0; i < 4; i++) {
@@ -368,24 +373,19 @@ class WKBGeometryBounder {
 
   ::arrow::Status ReadSequence(WKBBuffer* src, Dimensions::dimensions dimensions,
                                uint32_t n_coords, bool swap) {
-    using XY = std::array<double, 2>;
-    using XYZ = std::array<double, 3>;
-    using XYM = std::array<double, 3>;
-    using XYZM = std::array<double, 4>;
-
     switch (dimensions) {
       case Dimensions::dimensions::XY:
-        return src->ReadDoubles<XY>(n_coords, swap,
-                                    [&](XY coord) { box_.UpdateXY(coord); });
+        return src->ReadDoubles<BoundingBox::XY>(
+            n_coords, swap, [&](BoundingBox::XY coord) { box_.UpdateXY(coord); });
       case Dimensions::dimensions::XYZ:
-        return src->ReadDoubles<XYZ>(n_coords, swap,
-                                     [&](XYZ coord) { box_.UpdateXYZ(coord); });
+        return src->ReadDoubles<BoundingBox::XYZ>(
+            n_coords, swap, [&](BoundingBox::XYZ coord) { box_.UpdateXYZ(coord); });
       case Dimensions::dimensions::XYM:
-        return src->ReadDoubles<XYM>(n_coords, swap,
-                                     [&](XYM coord) { box_.UpdateXYM(coord); });
+        return src->ReadDoubles<BoundingBox::XYM>(
+            n_coords, swap, [&](BoundingBox::XYM coord) { box_.UpdateXYM(coord); });
       case Dimensions::dimensions::XYZM:
-        return src->ReadDoubles<XYZM>(n_coords, swap,
-                                      [&](XYZM coord) { box_.UpdateXYZM(coord); });
+        return src->ReadDoubles<BoundingBox::XYZM>(
+            n_coords, swap, [&](BoundingBox::XYZM coord) { box_.UpdateXYZM(coord); });
       default:
         return ::arrow::Status::Invalid("Unknown dimensions");
     }
