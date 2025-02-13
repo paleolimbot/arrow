@@ -19,13 +19,14 @@
 
 #include <algorithm>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <unordered_set>
 
+#include "arrow/result.h"
 #include "arrow/util/endian.h"
 #include "arrow/util/macros.h"
 #include "arrow/util/ubsan.h"
-#include "parquet/exception.h"
 
 namespace parquet::geometry {
 
@@ -145,60 +146,39 @@ class WKBBuffer {
     size_ = size;
   }
 
-  ::arrow::Result<uint8_t> ReadUInt8() {
-    if (size_ < 1) {
-      throw ParquetException("Can't read 1 byte from empty WKBBuffer");
-    }
-
-    size_ -= 1;
-    return *data_++;
-  }
+  ::arrow::Result<uint8_t> ReadUInt8() { return ReadChecked<uint8_t>(); }
 
   ::arrow::Result<uint32_t> ReadUInt32(bool swap) {
-    if (size_ < sizeof(uint32_t)) {
-      return ::arrow::Status::SerializationError(
-          "Can't read 4 bytes from from WKBBuffer with ", size_, " remaining");
-    }
-
-    uint32_t value = ::arrow::util::SafeLoadAs<uint32_t>(data_);
-    data_ += sizeof(uint32_t);
-    size_ -= sizeof(uint32_t);
+    ARROW_ASSIGN_OR_RAISE(auto value, ReadChecked<uint32_t>());
     if (ARROW_PREDICT_FALSE(swap)) {
-      return value = ::arrow::bit_util::ByteSwap(value);
+      return value = ByteSwap(value);
     } else {
       return value;
     }
   }
 
-  template <typename Coord, typename Func>
-  ::arrow::Status ReadDoubles(uint32_t n_coords, bool swap, Func&& func) {
-    if (n_coords == 0) {
-      return ::arrow::Status::OK();
-    }
-
+  template <typename Coord, typename Visit>
+  ::arrow::Status ReadDoubles(uint32_t n_coords, bool swap, Visit&& visit) {
     size_t total_bytes = n_coords * sizeof(Coord);
     if (size_ < total_bytes) {
       return ::arrow::Status::SerializationError(
-          "Can't read ", total_bytes, " bytes from WKBBuffer with ", size_, " remaining");
+          "Can't coordinate sequence of ", total_bytes, " bytes from WKBBuffer with ",
+          size_, " remaining");
     }
 
     if (ARROW_PREDICT_FALSE(swap)) {
       Coord coord;
       for (uint32_t i = 0; i < n_coords; i++) {
-        coord = ::arrow::util::SafeLoadAs<Coord>(data_);
+        coord = ReadUnchecked<Coord>();
         for (uint32_t j = 0; j < coord.size(); j++) {
-          coord[j] = ::arrow::bit_util::ByteSwap(coord[j]);
+          coord[j] = ByteSwap(coord[j]);
         }
 
-        func(coord);
-        data_ += sizeof(Coord);
-        size_ -= sizeof(Coord);
+        visit(coord);
       }
     } else {
       for (uint32_t i = 0; i < n_coords; i++) {
-        func(::arrow::util::SafeLoadAs<Coord>(data_));
-        data_ += sizeof(Coord);
-        size_ -= sizeof(Coord);
+        visit(ReadUnchecked<Coord>());
       }
     }
 
@@ -210,6 +190,29 @@ class WKBBuffer {
  private:
   const uint8_t* data_;
   size_t size_;
+
+  template <typename T>
+  ::arrow::Result<T> ReadChecked() {
+    if (size_ < sizeof(T)) {
+      return ::arrow::Status::SerializationError(
+          "Can't read ", sizeof(T), " bytes from WKBBuffer with ", size_, " remaining");
+    }
+
+    return ReadUnchecked<T>();
+  }
+
+  template <typename T>
+  T ReadUnchecked() {
+    T out = ::arrow::util::SafeLoadAs<T>(data_);
+    data_ += sizeof(T);
+    size_ -= sizeof(T);
+    return out;
+  }
+
+  template <typename T>
+  T ByteSwap(T value) {
+    return ::arrow::bit_util::ByteSwap(value);
+  }
 };
 
 struct BoundingBox {
