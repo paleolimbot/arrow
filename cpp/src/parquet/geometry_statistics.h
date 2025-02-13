@@ -17,12 +17,8 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <string>
-#include <utility>
 
 #include "parquet/platform.h"
 #include "parquet/types.h"
@@ -81,8 +77,6 @@ class PARQUET_EXPORT GeospatialStatistics {
   void Reset();
 
   EncodedGeospatialStatistics Encode() const;
-  std::string EncodeMin() const;
-  std::string EncodeMax() const;
 
   bool is_valid() const;
 

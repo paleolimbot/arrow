@@ -21,6 +21,7 @@
 #include <cstring>
 
 #include "parquet/geometry_util_internal.h"
+#include "parquet/test_util.h"
 
 namespace parquet::geometry {
 
@@ -473,7 +474,7 @@ class MakeWKBPointTestFixture : public testing::TestWithParam<MakeWKBPointTestCa
 
 TEST_P(MakeWKBPointTestFixture, MakeWKBPoint) {
   auto param = GetParam();
-  std::string wkb = MakeWKBPoint(param.xyzm, param.has_z, param.has_m);
+  std::string wkb = test::MakeWKBPoint(param.xyzm, param.has_z, param.has_m);
   WKBGeometryBounder bounder;
   WKBBuffer buf(reinterpret_cast<uint8_t*>(wkb.data()), wkb.size());
   bounder.ReadGeometry(&buf);

@@ -146,20 +146,6 @@ class GeospatialStatisticsImpl {
     return out;
   }
 
-  std::string EncodeMin() const {
-    const double* mins = bounder_.Bounds().min;
-    bool has_z = !std::isinf(mins[2]);
-    bool has_m = !std::isinf(mins[3]);
-    return geometry::MakeWKBPoint(mins, has_z, has_m);
-  }
-
-  std::string EncodeMax() const {
-    const double* maxes = bounder_.Bounds().max;
-    bool has_z = !std::isinf(maxes[2]);
-    bool has_m = !std::isinf(maxes[3]);
-    return geometry::MakeWKBPoint(maxes, has_z, has_m);
-  }
-
   void Update(const EncodedGeospatialStatistics& encoded) {
     if (!is_valid_) {
       return;
@@ -244,10 +230,6 @@ bool GeospatialStatistics::is_valid() const { return impl_->is_valid(); }
 EncodedGeospatialStatistics GeospatialStatistics::Encode() const {
   return impl_->Encode();
 }
-
-std::string GeospatialStatistics::EncodeMin() const { return impl_->EncodeMin(); }
-
-std::string GeospatialStatistics::EncodeMax() const { return impl_->EncodeMax(); }
 
 void GeospatialStatistics::Decode(const EncodedGeospatialStatistics& encoded) {
   impl_->Update(encoded);

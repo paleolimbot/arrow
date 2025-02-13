@@ -109,42 +109,6 @@ struct GeometryType {
     }
   }
 
-  static uint32_t ToWKB(geometry_type geometry_type, bool has_z, bool has_m) {
-    uint32_t wkb_geom_type = 0;
-    switch (geometry_type) {
-      case geometry_type::POINT:
-        wkb_geom_type = 1;
-        break;
-      case geometry_type::LINESTRING:
-        wkb_geom_type = 2;
-        break;
-      case geometry_type::POLYGON:
-        wkb_geom_type = 3;
-        break;
-      case geometry_type::MULTIPOINT:
-        wkb_geom_type = 4;
-        break;
-      case geometry_type::MULTILINESTRING:
-        wkb_geom_type = 5;
-        break;
-      case geometry_type::MULTIPOLYGON:
-        wkb_geom_type = 6;
-        break;
-      case geometry_type::GEOMETRYCOLLECTION:
-        wkb_geom_type = 7;
-        break;
-      default:
-        throw ParquetException("Invalid geometry_type");
-    }
-    if (has_z) {
-      wkb_geom_type += 1000;
-    }
-    if (has_m) {
-      wkb_geom_type += 2000;
-    }
-    return wkb_geom_type;
-  }
-
   static std::string ToString(geometry_type geometry_type) {
     switch (geometry_type) {
       case geometry_type::POINT:
@@ -431,36 +395,5 @@ class WKBGeometryBounder {
     }
   }
 };
-
-#if defined(ARROW_LITTLE_ENDIAN)
-static constexpr int kWkbNativeEndianness = geometry::WKBBuffer::WKB_LITTLE_ENDIAN;
-#else
-static constexpr int kWkbNativeEndianness = geometry::WKBBuffer::WKB_BIG_ENDIAN;
-#endif
-
-static inline std::string MakeWKBPoint(const double* xyzm, bool has_z, bool has_m) {
-  // 1:endianness + 4:type + 8:x + 8:y
-  int num_bytes = 21 + (has_z ? 8 : 0) + (has_m ? 8 : 0);
-  std::string wkb(num_bytes, 0);
-  char* ptr = wkb.data();
-
-  ptr[0] = kWkbNativeEndianness;
-  uint32_t geom_type = geometry::GeometryType::ToWKB(
-      geometry::GeometryType::geometry_type::POINT, has_z, has_m);
-  std::memcpy(&ptr[1], &geom_type, 4);
-  std::memcpy(&ptr[5], &xyzm[0], 8);
-  std::memcpy(&ptr[13], &xyzm[1], 8);
-  ptr += 21;
-
-  if (has_z) {
-    std::memcpy(ptr, &xyzm[2], 8);
-    ptr += 8;
-  }
-  if (has_m) {
-    std::memcpy(ptr, &xyzm[3], 8);
-  }
-
-  return wkb;
-}
 
 }  // namespace parquet::geometry
