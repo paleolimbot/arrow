@@ -34,51 +34,6 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 
 struct Dimensions {
   enum class dimensions { XY = 0, XYZ = 1, XYM = 2, XYZM = 3 };
-
-  static ::arrow::Result<dimensions> FromWKB(uint32_t wkb_geometry_type) {
-    switch (wkb_geometry_type / 1000) {
-      case 0:
-        return dimensions::XY;
-      case 1:
-        return dimensions::XYZ;
-      case 2:
-        return dimensions::XYM;
-      case 3:
-        return dimensions::XYZM;
-      default:
-        return ::arrow::Status::SerializationError("Invalid wkb_geometry_type: ",
-                                                   wkb_geometry_type);
-    }
-  }
-
-  static uint32_t size(dimensions dims) {
-    switch (dims) {
-      case dimensions::XY:
-        return 2;
-      case dimensions::XYZ:
-      case dimensions::XYM:
-        return 3;
-      case dimensions::XYZM:
-        return 4;
-      default:
-        return 0;
-    }
-  }
-
-  static std::string ToString(dimensions dims) {
-    switch (dims) {
-      case dimensions::XY:
-        return "XY";
-      case dimensions::XYZ:
-        return "XYZ";
-      case dimensions::XYM:
-        return "XYM";
-      case dimensions::XYZM:
-        return "XYZM";
-      default:
-        return "";
-    }
-  }
 };
 
 struct GeometryType {
@@ -91,49 +46,6 @@ struct GeometryType {
     MULTIPOLYGON = 6,
     GEOMETRYCOLLECTION = 7
   };
-
-  static ::arrow::Result<geometry_type> FromWKB(uint32_t wkb_geometry_type) {
-    switch (wkb_geometry_type % 1000) {
-      case 1:
-        return geometry_type::POINT;
-      case 2:
-        return geometry_type::LINESTRING;
-      case 3:
-        return geometry_type::POLYGON;
-      case 4:
-        return geometry_type::MULTIPOINT;
-      case 5:
-        return geometry_type::MULTILINESTRING;
-      case 6:
-        return geometry_type::MULTIPOLYGON;
-      case 7:
-        return geometry_type::GEOMETRYCOLLECTION;
-      default:
-        return ::arrow::Status::SerializationError("Invalid wkb_geometry_type: ",
-                                                   wkb_geometry_type);
-    }
-  }
-
-  static std::string ToString(geometry_type geometry_type) {
-    switch (geometry_type) {
-      case geometry_type::POINT:
-        return "POINT";
-      case geometry_type::LINESTRING:
-        return "LINESTRING";
-      case geometry_type::POLYGON:
-        return "POLYGON";
-      case geometry_type::MULTIPOINT:
-        return "MULTIPOINT";
-      case geometry_type::MULTILINESTRING:
-        return "MULTILINESTRING";
-      case geometry_type::MULTIPOLYGON:
-        return "MULTIPOLYGON";
-      case geometry_type::GEOMETRYCOLLECTION:
-        return "GEOMETRYCOLLECTION";
-      default:
-        return "";
-    }
-  }
 };
 
 class WKBBuffer {
@@ -297,59 +209,7 @@ class WKBGeometryBounder {
   WKBGeometryBounder() = default;
   WKBGeometryBounder(const WKBGeometryBounder&) = default;
 
-  ::arrow::Status ReadGeometry(WKBBuffer* src, bool record_wkb_type = true) {
-    ARROW_ASSIGN_OR_RAISE(uint8_t endian, src->ReadUInt8());
-#if defined(ARROW_LITTLE_ENDIAN)
-    bool swap = endian != 0x01;
-#else
-    bool swap = endian != 0x00;
-#endif
-
-    ARROW_ASSIGN_OR_RAISE(uint32_t wkb_geometry_type, src->ReadUInt32(swap));
-    ARROW_ASSIGN_OR_RAISE(auto geometry_type, GeometryType::FromWKB(wkb_geometry_type));
-    ARROW_ASSIGN_OR_RAISE(auto dimensions, Dimensions::FromWKB(wkb_geometry_type));
-
-    // Keep track of geometry types encountered if at the top level
-    if (record_wkb_type) {
-      geospatial_types_.insert(static_cast<int32_t>(wkb_geometry_type));
-    }
-
-    switch (geometry_type) {
-      case GeometryType::geometry_type::POINT:
-        ARROW_RETURN_NOT_OK(ReadSequence(src, dimensions, 1, swap));
-        break;
-
-      case GeometryType::geometry_type::LINESTRING: {
-        ARROW_ASSIGN_OR_RAISE(uint32_t n_coords, src->ReadUInt32(swap));
-        ARROW_RETURN_NOT_OK(ReadSequence(src, dimensions, n_coords, swap));
-        break;
-      }
-      case GeometryType::geometry_type::POLYGON: {
-        ARROW_ASSIGN_OR_RAISE(uint32_t n_parts, src->ReadUInt32(swap));
-        for (uint32_t i = 0; i < n_parts; i++) {
-          ARROW_ASSIGN_OR_RAISE(uint32_t n_coords, src->ReadUInt32(swap));
-          ARROW_RETURN_NOT_OK(ReadSequence(src, dimensions, n_coords, swap));
-        }
-        break;
-      }
-
-      // These are all encoded the same in WKB, even though this encoding would
-      // allow for parts to be of a different geometry type or different dimensions.
-      // For the purposes of bounding, this does not cause us problems.
-      case GeometryType::geometry_type::MULTIPOINT:
-      case GeometryType::geometry_type::MULTILINESTRING:
-      case GeometryType::geometry_type::MULTIPOLYGON:
-      case GeometryType::geometry_type::GEOMETRYCOLLECTION: {
-        ARROW_ASSIGN_OR_RAISE(uint32_t n_parts, src->ReadUInt32(swap));
-        for (uint32_t i = 0; i < n_parts; i++) {
-          ARROW_RETURN_NOT_OK(ReadGeometry(src, /*record_wkb_type*/ false));
-        }
-        break;
-      }
-    }
-
-    return ::arrow::Status::OK();
-  }
+  ::arrow::Status ReadGeometry(WKBBuffer* src) { return ReadGeometryInternal(src); }
 
   void ReadBox(const BoundingBox& box) { box_.Merge(box); }
 
@@ -374,6 +234,66 @@ class WKBGeometryBounder {
   BoundingBox box_;
   std::unordered_set<int32_t> geospatial_types_;
 
+  using GeometryTypeAndDimensions =
+      std::pair<GeometryType::geometry_type, Dimensions::dimensions>;
+
+  ::arrow::Status ReadGeometryInternal(WKBBuffer* src, bool record_wkb_type = true) {
+    ARROW_ASSIGN_OR_RAISE(uint8_t endian, src->ReadUInt8());
+#if defined(ARROW_LITTLE_ENDIAN)
+    bool swap = endian != 0x01;
+#else
+    bool swap = endian != 0x00;
+#endif
+
+    ARROW_ASSIGN_OR_RAISE(uint32_t wkb_geometry_type, src->ReadUInt32(swap));
+    ARROW_ASSIGN_OR_RAISE(auto geometry_type_and_dimensions,
+                          ParseGeometryType(wkb_geometry_type));
+
+    // Keep track of geometry types encountered if at the top level
+    if (record_wkb_type) {
+      geospatial_types_.insert(static_cast<int32_t>(wkb_geometry_type));
+    }
+
+    switch (geometry_type_and_dimensions.first) {
+      case GeometryType::geometry_type::POINT:
+        ARROW_RETURN_NOT_OK(
+            ReadSequence(src, geometry_type_and_dimensions.second, 1, swap));
+        break;
+
+      case GeometryType::geometry_type::LINESTRING: {
+        ARROW_ASSIGN_OR_RAISE(uint32_t n_coords, src->ReadUInt32(swap));
+        ARROW_RETURN_NOT_OK(
+            ReadSequence(src, geometry_type_and_dimensions.second, n_coords, swap));
+        break;
+      }
+      case GeometryType::geometry_type::POLYGON: {
+        ARROW_ASSIGN_OR_RAISE(uint32_t n_parts, src->ReadUInt32(swap));
+        for (uint32_t i = 0; i < n_parts; i++) {
+          ARROW_ASSIGN_OR_RAISE(uint32_t n_coords, src->ReadUInt32(swap));
+          ARROW_RETURN_NOT_OK(
+              ReadSequence(src, geometry_type_and_dimensions.second, n_coords, swap));
+        }
+        break;
+      }
+
+      // These are all encoded the same in WKB, even though this encoding would
+      // allow for parts to be of a different geometry type or different dimensions.
+      // For the purposes of bounding, this does not cause us problems.
+      case GeometryType::geometry_type::MULTIPOINT:
+      case GeometryType::geometry_type::MULTILINESTRING:
+      case GeometryType::geometry_type::MULTIPOLYGON:
+      case GeometryType::geometry_type::GEOMETRYCOLLECTION: {
+        ARROW_ASSIGN_OR_RAISE(uint32_t n_parts, src->ReadUInt32(swap));
+        for (uint32_t i = 0; i < n_parts; i++) {
+          ARROW_RETURN_NOT_OK(ReadGeometryInternal(src, /*record_wkb_type*/ false));
+        }
+        break;
+      }
+    }
+
+    return ::arrow::Status::OK();
+  }
+
   ::arrow::Status ReadSequence(WKBBuffer* src, Dimensions::dimensions dimensions,
                                uint32_t n_coords, bool swap) {
     switch (dimensions) {
@@ -392,6 +312,35 @@ class WKBGeometryBounder {
       default:
         return ::arrow::Status::Invalid("Unknown dimensions");
     }
+  }
+
+  static ::arrow::Result<GeometryTypeAndDimensions> ParseGeometryType(
+      uint32_t wkb_geometry_type) {
+    // The number 1000 can be used because WKB geometry types are constructed
+    // on purpose such that this relationship is true (e.g., LINESTRING ZM maps
+    // to 3002).
+    uint32_t geometry_type_component = wkb_geometry_type % 1000;
+    uint32_t dimensions_component = wkb_geometry_type / 1000;
+
+    auto min_geometry_type_value =
+        static_cast<uint32_t>(GeometryType::geometry_type::POINT);
+    auto max_geometry_type_value =
+        static_cast<uint32_t>(GeometryType::geometry_type::GEOMETRYCOLLECTION);
+    auto min_dimension_value = static_cast<uint32_t>(Dimensions::dimensions::XY);
+    auto max_dimension_value = static_cast<uint32_t>(Dimensions::dimensions::XYZM);
+
+    if (geometry_type_component < min_geometry_type_value ||
+        geometry_type_component > max_geometry_type_value ||
+        dimensions_component < min_dimension_value ||
+        dimensions_component > max_dimension_value) {
+      return ::arrow::Status::SerializationError("Invalid WKB geometry type: ",
+                                                 wkb_geometry_type);
+    }
+
+    GeometryTypeAndDimensions out{
+        static_cast<GeometryType::geometry_type>(geometry_type_component),
+        static_cast<Dimensions::dimensions>(dimensions_component)};
+    return out;
   }
 };
 

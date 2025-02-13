@@ -27,50 +27,6 @@
 
 namespace parquet::geometry {
 
-TEST(TestGeometryUtil, TestDimensions) {
-  EXPECT_EQ(Dimensions::size(Dimensions::dimensions::XY), 2);
-  EXPECT_EQ(Dimensions::size(Dimensions::dimensions::XYZ), 3);
-  EXPECT_EQ(Dimensions::size(Dimensions::dimensions::XYM), 3);
-  EXPECT_EQ(Dimensions::size(Dimensions::dimensions::XYZM), 4);
-
-  EXPECT_EQ(Dimensions::ToString(Dimensions::dimensions::XY), "XY");
-  EXPECT_EQ(Dimensions::ToString(Dimensions::dimensions::XYZ), "XYZ");
-  EXPECT_EQ(Dimensions::ToString(Dimensions::dimensions::XYM), "XYM");
-  EXPECT_EQ(Dimensions::ToString(Dimensions::dimensions::XYZM), "XYZM");
-
-  EXPECT_EQ(*Dimensions::FromWKB(1), Dimensions::dimensions::XY);
-  EXPECT_EQ(*Dimensions::FromWKB(1001), Dimensions::dimensions::XYZ);
-  EXPECT_EQ(*Dimensions::FromWKB(2001), Dimensions::dimensions::XYM);
-  EXPECT_EQ(*Dimensions::FromWKB(3001), Dimensions::dimensions::XYZM);
-  EXPECT_FALSE(Dimensions::FromWKB(4001).ok());
-}
-
-TEST(TestGeometryUtil, TestGeometryType) {
-  EXPECT_EQ(GeometryType::ToString(GeometryType::geometry_type::POINT), "POINT");
-  EXPECT_EQ(GeometryType::ToString(GeometryType::geometry_type::LINESTRING),
-            "LINESTRING");
-  EXPECT_EQ(GeometryType::ToString(GeometryType::geometry_type::POLYGON), "POLYGON");
-  EXPECT_EQ(GeometryType::ToString(GeometryType::geometry_type::MULTIPOINT),
-            "MULTIPOINT");
-  EXPECT_EQ(GeometryType::ToString(GeometryType::geometry_type::MULTILINESTRING),
-            "MULTILINESTRING");
-  EXPECT_EQ(GeometryType::ToString(GeometryType::geometry_type::MULTIPOLYGON),
-            "MULTIPOLYGON");
-  EXPECT_EQ(GeometryType::ToString(GeometryType::geometry_type::GEOMETRYCOLLECTION),
-            "GEOMETRYCOLLECTION");
-
-  EXPECT_EQ(*GeometryType::FromWKB(1), GeometryType::geometry_type::POINT);
-  EXPECT_EQ(*GeometryType::FromWKB(1001), GeometryType::geometry_type::POINT);
-  EXPECT_EQ(*GeometryType::FromWKB(1002), GeometryType::geometry_type::LINESTRING);
-  EXPECT_EQ(*GeometryType::FromWKB(1003), GeometryType::geometry_type::POLYGON);
-  EXPECT_EQ(*GeometryType::FromWKB(1004), GeometryType::geometry_type::MULTIPOINT);
-  EXPECT_EQ(*GeometryType::FromWKB(1005), GeometryType::geometry_type::MULTILINESTRING);
-  EXPECT_EQ(*GeometryType::FromWKB(1006), GeometryType::geometry_type::MULTIPOLYGON);
-  EXPECT_EQ(*GeometryType::FromWKB(1007),
-            GeometryType::geometry_type::GEOMETRYCOLLECTION);
-  EXPECT_FALSE(GeometryType::FromWKB(1100).ok());
-}
-
 TEST(TestGeometryUtil, TestBoundingBox) {
   BoundingBox box;
   EXPECT_EQ(box, BoundingBox({kInf, kInf, kInf, kInf}, {-kInf, -kInf, -kInf, -kInf}));
@@ -107,9 +63,10 @@ struct WKBTestCase {
       mins = {box_values[0], box_values[1], kInf, box_values[2]};
       maxes = {box_values[3], box_values[4], -kInf, box_values[5]};
     } else {
-      for (uint32_t i = 0; i < Dimensions::size(y); i++) {
+      size_t coord_size = box_values.size() / 2;
+      for (uint32_t i = 0; i < coord_size; i++) {
         mins[i] = box_values[i];
-        maxes[i] = box_values[Dimensions::size(y) + i];
+        maxes[i] = box_values[coord_size + i];
       }
     }
 
@@ -124,8 +81,9 @@ struct WKBTestCase {
 };
 
 std::ostream& operator<<(std::ostream& os, const WKBTestCase& obj) {
-  os << GeometryType::ToString(obj.geometry_type) << " "
-     << Dimensions::ToString(obj.dimensions);
+  uint32_t iso_wkb_geometry_type =
+      static_cast<int>(obj.dimensions) * 1000 + static_cast<int>(obj.geometry_type);
+  os << "WKBTestCase<" << iso_wkb_geometry_type << ">";
   return os;
 }
 
