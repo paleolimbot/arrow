@@ -20,6 +20,8 @@
 #include <cmath>
 #include <cstring>
 
+#include "arrow/testing/gtest_util.h"
+
 #include "parquet/geometry_util_internal.h"
 #include "parquet/test_util.h"
 
@@ -36,11 +38,11 @@ TEST(TestGeometryUtil, TestDimensions) {
   EXPECT_EQ(Dimensions::ToString(Dimensions::dimensions::XYM), "XYM");
   EXPECT_EQ(Dimensions::ToString(Dimensions::dimensions::XYZM), "XYZM");
 
-  EXPECT_EQ(Dimensions::FromWKB(1), Dimensions::dimensions::XY);
-  EXPECT_EQ(Dimensions::FromWKB(1001), Dimensions::dimensions::XYZ);
-  EXPECT_EQ(Dimensions::FromWKB(2001), Dimensions::dimensions::XYM);
-  EXPECT_EQ(Dimensions::FromWKB(3001), Dimensions::dimensions::XYZM);
-  EXPECT_THROW(Dimensions::FromWKB(4001), ParquetException);
+  EXPECT_EQ(*Dimensions::FromWKB(1), Dimensions::dimensions::XY);
+  EXPECT_EQ(*Dimensions::FromWKB(1001), Dimensions::dimensions::XYZ);
+  EXPECT_EQ(*Dimensions::FromWKB(2001), Dimensions::dimensions::XYM);
+  EXPECT_EQ(*Dimensions::FromWKB(3001), Dimensions::dimensions::XYZM);
+  EXPECT_FALSE(Dimensions::FromWKB(4001).ok());
 }
 
 TEST(TestGeometryUtil, TestGeometryType) {
@@ -57,15 +59,16 @@ TEST(TestGeometryUtil, TestGeometryType) {
   EXPECT_EQ(GeometryType::ToString(GeometryType::geometry_type::GEOMETRYCOLLECTION),
             "GEOMETRYCOLLECTION");
 
-  EXPECT_EQ(GeometryType::FromWKB(1), GeometryType::geometry_type::POINT);
-  EXPECT_EQ(GeometryType::FromWKB(1001), GeometryType::geometry_type::POINT);
-  EXPECT_EQ(GeometryType::FromWKB(1002), GeometryType::geometry_type::LINESTRING);
-  EXPECT_EQ(GeometryType::FromWKB(1003), GeometryType::geometry_type::POLYGON);
-  EXPECT_EQ(GeometryType::FromWKB(1004), GeometryType::geometry_type::MULTIPOINT);
-  EXPECT_EQ(GeometryType::FromWKB(1005), GeometryType::geometry_type::MULTILINESTRING);
-  EXPECT_EQ(GeometryType::FromWKB(1006), GeometryType::geometry_type::MULTIPOLYGON);
-  EXPECT_EQ(GeometryType::FromWKB(1007), GeometryType::geometry_type::GEOMETRYCOLLECTION);
-  EXPECT_THROW(GeometryType::FromWKB(1100), ParquetException);
+  EXPECT_EQ(*GeometryType::FromWKB(1), GeometryType::geometry_type::POINT);
+  EXPECT_EQ(*GeometryType::FromWKB(1001), GeometryType::geometry_type::POINT);
+  EXPECT_EQ(*GeometryType::FromWKB(1002), GeometryType::geometry_type::LINESTRING);
+  EXPECT_EQ(*GeometryType::FromWKB(1003), GeometryType::geometry_type::POLYGON);
+  EXPECT_EQ(*GeometryType::FromWKB(1004), GeometryType::geometry_type::MULTIPOINT);
+  EXPECT_EQ(*GeometryType::FromWKB(1005), GeometryType::geometry_type::MULTILINESTRING);
+  EXPECT_EQ(*GeometryType::FromWKB(1006), GeometryType::geometry_type::MULTIPOLYGON);
+  EXPECT_EQ(*GeometryType::FromWKB(1007),
+            GeometryType::geometry_type::GEOMETRYCOLLECTION);
+  EXPECT_FALSE(GeometryType::FromWKB(1100).ok());
 }
 
 TEST(TestGeometryUtil, TestBoundingBox) {
@@ -143,7 +146,7 @@ TEST_P(WKBTestFixture, TestWKBBounderNonEmpty) {
   EXPECT_EQ(bounder.Bounds(), BoundingBox());
 
   WKBBuffer buf(item.wkb.data(), item.wkb.size());
-  bounder.ReadGeometry(&buf);
+  ASSERT_OK(bounder.ReadGeometry(&buf));
   EXPECT_EQ(buf.size(), 0);
 
   EXPECT_EQ(bounder.Bounds(), item.box);
@@ -477,7 +480,7 @@ TEST_P(MakeWKBPointTestFixture, MakeWKBPoint) {
   std::string wkb = test::MakeWKBPoint(param.xyzm, param.has_z, param.has_m);
   WKBGeometryBounder bounder;
   WKBBuffer buf(reinterpret_cast<uint8_t*>(wkb.data()), wkb.size());
-  bounder.ReadGeometry(&buf);
+  ASSERT_OK(bounder.ReadGeometry(&buf));
   const double* mins = bounder.Bounds().min;
   EXPECT_DOUBLE_EQ(param.xyzm[0], mins[0]);
   EXPECT_DOUBLE_EQ(param.xyzm[1], mins[1]);

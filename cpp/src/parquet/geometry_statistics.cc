@@ -73,14 +73,14 @@ class GeospatialStatisticsImpl {
     }
 
     geometry::WKBBuffer buf;
-    try {
-      for (int64_t i = 0; i < num_values; i++) {
-        const ByteArray& item = values[i];
-        buf.Init(item.ptr, item.len);
-        bounder_.ReadGeometry(&buf);
+    for (int64_t i = 0; i < num_values; i++) {
+      const ByteArray& item = values[i];
+      buf.Init(item.ptr, item.len);
+      ::arrow::Status status = bounder_.ReadGeometry(&buf);
+      if (!status.ok()) {
+        is_valid_ = false;
+        return;
       }
-    } catch (ParquetException&) {
-      is_valid_ = false;
     }
   }
 
@@ -89,36 +89,46 @@ class GeospatialStatisticsImpl {
                     int64_t num_values, int64_t null_count) {
     DCHECK_GT(num_spaced_values, 0);
 
+    if (!is_valid_) {
+      return;
+    }
+
     geometry::WKBBuffer buf;
-    try {
-      ::arrow::internal::VisitSetBitRunsVoid(
-          valid_bits, valid_bits_offset, num_spaced_values,
-          [&](int64_t position, int64_t length) {
-            for (int64_t i = 0; i < length; i++) {
-              ByteArray item = SafeLoad(values + i + position);
-              buf.Init(item.ptr, item.len);
-              bounder_.ReadGeometry(&buf);
-            }
-          });
-    } catch (ParquetException&) {
+    ::arrow::Status status = ::arrow::internal::VisitSetBitRuns(
+        valid_bits, valid_bits_offset, num_spaced_values,
+        [&](int64_t position, int64_t length) {
+          for (int64_t i = 0; i < length; i++) {
+            ByteArray item = SafeLoad(values + i + position);
+            buf.Init(item.ptr, item.len);
+            ARROW_RETURN_NOT_OK(bounder_.ReadGeometry(&buf));
+          }
+
+          return ::arrow::Status::OK();
+        });
+
+    if (!status.ok()) {
       is_valid_ = false;
     }
   }
 
   void Update(const ::arrow::Array& values) {
+    if (!is_valid_) {
+      return;
+    }
+
     const auto& binary_array = static_cast<const ::arrow::BinaryArray&>(values);
     geometry::WKBBuffer buf;
-    try {
-      for (int64_t i = 0; i < binary_array.length(); ++i) {
-        if (!binary_array.IsNull(i)) {
-          std::string_view byte_array = binary_array.GetView(i);
-          buf.Init(reinterpret_cast<const uint8_t*>(byte_array.data()),
-                   byte_array.length());
-          bounder_.ReadGeometry(&buf);
+    for (int64_t i = 0; i < binary_array.length(); ++i) {
+      if (!binary_array.IsNull(i)) {
+        std::string_view byte_array = binary_array.GetView(i);
+        buf.Init(reinterpret_cast<const uint8_t*>(byte_array.data()),
+                 byte_array.length());
+        ::arrow::Status status = bounder_.ReadGeometry(&buf);
+        if (!status.ok()) {
+          is_valid_ = false;
+          return;
         }
       }
-    } catch (ParquetException&) {
-      is_valid_ = false;
     }
   }
 

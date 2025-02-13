@@ -34,7 +34,7 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 struct Dimensions {
   enum class dimensions { XY = 0, XYZ = 1, XYM = 2, XYZM = 3 };
 
-  static dimensions FromWKB(uint32_t wkb_geometry_type) {
+  static ::arrow::Result<dimensions> FromWKB(uint32_t wkb_geometry_type) {
     switch (wkb_geometry_type / 1000) {
       case 0:
         return dimensions::XY;
@@ -45,7 +45,8 @@ struct Dimensions {
       case 3:
         return dimensions::XYZM;
       default:
-        throw ParquetException("Invalid wkb_geometry_type: ", wkb_geometry_type);
+        return ::arrow::Status::SerializationError("Invalid wkb_geometry_type: ",
+                                                   wkb_geometry_type);
     }
   }
 
@@ -58,6 +59,8 @@ struct Dimensions {
         return 3;
       case dimensions::XYZM:
         return 4;
+      default:
+        return 0;
     }
   }
 
@@ -72,7 +75,7 @@ struct Dimensions {
       case dimensions::XYZM:
         return "XYZM";
       default:
-        throw ParquetException("Unknown geometry dimension");
+        return "";
     }
   }
 };
@@ -88,7 +91,7 @@ struct GeometryType {
     GEOMETRYCOLLECTION = 7
   };
 
-  static geometry_type FromWKB(uint32_t wkb_geometry_type) {
+  static ::arrow::Result<geometry_type> FromWKB(uint32_t wkb_geometry_type) {
     switch (wkb_geometry_type % 1000) {
       case 1:
         return geometry_type::POINT;
@@ -105,7 +108,8 @@ struct GeometryType {
       case 7:
         return geometry_type::GEOMETRYCOLLECTION;
       default:
-        throw ParquetException("Invalid wkb_geometry_type: ", wkb_geometry_type);
+        return ::arrow::Status::SerializationError("Invalid wkb_geometry_type: ",
+                                                   wkb_geometry_type);
     }
   }
 
@@ -133,8 +137,6 @@ struct GeometryType {
 
 class WKBBuffer {
  public:
-  enum Endianness { WKB_BIG_ENDIAN = 0, WKB_LITTLE_ENDIAN = 1 };
-
   WKBBuffer() : data_(NULLPTR), size_(0) {}
   WKBBuffer(const uint8_t* data, int64_t size) : data_(data), size_(size) {}
 
@@ -143,7 +145,7 @@ class WKBBuffer {
     size_ = size;
   }
 
-  uint8_t ReadUInt8() {
+  ::arrow::Result<uint8_t> ReadUInt8() {
     if (size_ < 1) {
       throw ParquetException("Can't read 1 byte from empty WKBBuffer");
     }
@@ -152,43 +154,32 @@ class WKBBuffer {
     return *data_++;
   }
 
-  uint32_t ReadUInt32(bool swap) {
-    if (ARROW_PREDICT_FALSE(swap)) {
-      return ReadUInt32<true>();
-    } else {
-      return ReadUInt32<false>();
-    }
-  }
-
-  template <bool swap>
-  uint32_t ReadUInt32() {
+  ::arrow::Result<uint32_t> ReadUInt32(bool swap) {
     if (size_ < sizeof(uint32_t)) {
-      throw ParquetException("Can't read 4 bytes from WKBBuffer with ", size_,
-                             " remaining");
+      return ::arrow::Status::SerializationError(
+          "Can't read 4 bytes from from WKBBuffer with ", size_, " remaining");
     }
 
-    uint32_t value;
-    memcpy(&value, data_, sizeof(uint32_t));
+    uint32_t value = ::arrow::util::SafeLoadAs<uint32_t>(data_);
     data_ += sizeof(uint32_t);
     size_ -= sizeof(uint32_t);
-
-    if constexpr (swap) {
-      value = ::arrow::bit_util::ByteSwap(value);
+    if (ARROW_PREDICT_FALSE(swap)) {
+      return value = ::arrow::bit_util::ByteSwap(value);
+    } else {
+      return value;
     }
-
-    return value;
   }
 
   template <typename Coord, typename Func>
-  void ReadDoubles(uint32_t n_coords, bool swap, Func&& func) {
+  ::arrow::Status ReadDoubles(uint32_t n_coords, bool swap, Func&& func) {
     if (n_coords == 0) {
-      return;
+      return ::arrow::Status::OK();
     }
 
     size_t total_bytes = n_coords * sizeof(Coord);
     if (size_ < total_bytes) {
-      throw ParquetException("Can't read ", total_bytes, " bytes from WKBBuffer with ",
-                             size_, " remaining");
+      return ::arrow::Status::SerializationError(
+          "Can't read ", total_bytes, " bytes from WKBBuffer with ", size_, " remaining");
     }
 
     if (ARROW_PREDICT_FALSE(swap)) {
@@ -210,6 +201,8 @@ class WKBBuffer {
         size_ -= sizeof(Coord);
       }
     }
+
+    return ::arrow::Status::OK();
   }
 
   size_t size() { return size_; }
@@ -224,7 +217,7 @@ struct BoundingBox {
     std::memcpy(min, mins.data(), sizeof(min));
     std::memcpy(max, maxes.data(), sizeof(max));
   }
-  explicit BoundingBox() : min{kInf, kInf, kInf, kInf}, max{-kInf, -kInf, -kInf, -kInf} {}
+  BoundingBox() : min{kInf, kInf, kInf, kInf}, max{-kInf, -kInf, -kInf, -kInf} {}
 
   BoundingBox(const BoundingBox& other) = default;
   BoundingBox& operator=(const BoundingBox&) = default;
@@ -296,17 +289,17 @@ class WKBGeometryBounder {
   WKBGeometryBounder() = default;
   WKBGeometryBounder(const WKBGeometryBounder&) = default;
 
-  void ReadGeometry(WKBBuffer* src, bool record_wkb_type = true) {
-    uint8_t endian = src->ReadUInt8();
+  ::arrow::Status ReadGeometry(WKBBuffer* src, bool record_wkb_type = true) {
+    ARROW_ASSIGN_OR_RAISE(uint8_t endian, src->ReadUInt8());
 #if defined(ARROW_LITTLE_ENDIAN)
-    bool swap = endian != WKBBuffer::WKB_LITTLE_ENDIAN;
+    bool swap = endian != 0x01;
 #else
-    bool swap = endian != WKBBuffer::WKB_BIG_ENDIAN;
+    bool swap = endian != 0x00;
 #endif
 
-    uint32_t wkb_geometry_type = src->ReadUInt32(swap);
-    auto geometry_type = GeometryType::FromWKB(wkb_geometry_type);
-    auto dimensions = Dimensions::FromWKB(wkb_geometry_type);
+    ARROW_ASSIGN_OR_RAISE(uint32_t wkb_geometry_type, src->ReadUInt32(swap));
+    ARROW_ASSIGN_OR_RAISE(auto geometry_type, GeometryType::FromWKB(wkb_geometry_type));
+    ARROW_ASSIGN_OR_RAISE(auto dimensions, Dimensions::FromWKB(wkb_geometry_type));
 
     // Keep track of geometry types encountered if at the top level
     if (record_wkb_type) {
@@ -315,19 +308,19 @@ class WKBGeometryBounder {
 
     switch (geometry_type) {
       case GeometryType::geometry_type::POINT:
-        ReadSequence(src, dimensions, 1, swap);
+        ARROW_RETURN_NOT_OK(ReadSequence(src, dimensions, 1, swap));
         break;
 
       case GeometryType::geometry_type::LINESTRING: {
-        uint32_t n_coords = src->ReadUInt32(swap);
-        ReadSequence(src, dimensions, n_coords, swap);
+        ARROW_ASSIGN_OR_RAISE(uint32_t n_coords, src->ReadUInt32(swap));
+        ARROW_RETURN_NOT_OK(ReadSequence(src, dimensions, n_coords, swap));
         break;
       }
       case GeometryType::geometry_type::POLYGON: {
-        uint32_t n_parts = src->ReadUInt32(swap);
+        ARROW_ASSIGN_OR_RAISE(uint32_t n_parts, src->ReadUInt32(swap));
         for (uint32_t i = 0; i < n_parts; i++) {
-          uint32_t n_coords = src->ReadUInt32(swap);
-          ReadSequence(src, dimensions, n_coords, swap);
+          ARROW_ASSIGN_OR_RAISE(uint32_t n_coords, src->ReadUInt32(swap));
+          ARROW_RETURN_NOT_OK(ReadSequence(src, dimensions, n_coords, swap));
         }
         break;
       }
@@ -339,13 +332,15 @@ class WKBGeometryBounder {
       case GeometryType::geometry_type::MULTILINESTRING:
       case GeometryType::geometry_type::MULTIPOLYGON:
       case GeometryType::geometry_type::GEOMETRYCOLLECTION: {
-        uint32_t n_parts = src->ReadUInt32(swap);
+        ARROW_ASSIGN_OR_RAISE(uint32_t n_parts, src->ReadUInt32(swap));
         for (uint32_t i = 0; i < n_parts; i++) {
-          ReadGeometry(src, /*record_wkb_type*/ false);
+          ARROW_RETURN_NOT_OK(ReadGeometry(src, /*record_wkb_type*/ false));
         }
         break;
       }
     }
+
+    return ::arrow::Status::OK();
   }
 
   void ReadBox(const BoundingBox& box) { box_.Merge(box); }
@@ -371,8 +366,8 @@ class WKBGeometryBounder {
   BoundingBox box_;
   std::unordered_set<int32_t> geospatial_types_;
 
-  void ReadSequence(WKBBuffer* src, Dimensions::dimensions dimensions, uint32_t n_coords,
-                    bool swap) {
+  ::arrow::Status ReadSequence(WKBBuffer* src, Dimensions::dimensions dimensions,
+                               uint32_t n_coords, bool swap) {
     using XY = std::array<double, 2>;
     using XYZ = std::array<double, 3>;
     using XYM = std::array<double, 3>;
@@ -380,18 +375,17 @@ class WKBGeometryBounder {
 
     switch (dimensions) {
       case Dimensions::dimensions::XY:
-        src->ReadDoubles<XY>(n_coords, swap, [&](XY coord) { box_.UpdateXY(coord); });
-        break;
+        return src->ReadDoubles<XY>(n_coords, swap,
+                                    [&](XY coord) { box_.UpdateXY(coord); });
       case Dimensions::dimensions::XYZ:
-        src->ReadDoubles<XYZ>(n_coords, swap, [&](XYZ coord) { box_.UpdateXYZ(coord); });
-        break;
+        return src->ReadDoubles<XYZ>(n_coords, swap,
+                                     [&](XYZ coord) { box_.UpdateXYZ(coord); });
       case Dimensions::dimensions::XYM:
-        src->ReadDoubles<XYM>(n_coords, swap, [&](XYM coord) { box_.UpdateXYM(coord); });
-        break;
+        return src->ReadDoubles<XYM>(n_coords, swap,
+                                     [&](XYM coord) { box_.UpdateXYM(coord); });
       case Dimensions::dimensions::XYZM:
-        src->ReadDoubles<XYZM>(n_coords, swap,
-                               [&](XYZM coord) { box_.UpdateXYZM(coord); });
-        break;
+        return src->ReadDoubles<XYZM>(n_coords, swap,
+                                      [&](XYZM coord) { box_.UpdateXYZM(coord); });
     }
   }
 };
