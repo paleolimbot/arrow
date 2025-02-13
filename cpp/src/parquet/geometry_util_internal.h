@@ -18,13 +18,11 @@
 #pragma once
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
 #include <string>
 #include <unordered_set>
 
 #include "arrow/util/endian.h"
-#include "arrow/util/logging.h"
 #include "arrow/util/macros.h"
 #include "arrow/util/ubsan.h"
 #include "parquet/exception.h"
@@ -51,25 +49,15 @@ struct Dimensions {
     }
   }
 
-  template <dimensions dims>
-  constexpr static uint32_t size();
-
-  static uint32_t size(dimensions dims);
-
-  // Where to look in a coordinate with this dimension
-  // for the X, Y, Z, and M dimensions, respectively.
-  static std::array<int, 4> ToXYZM(dimensions dims) {
+  static uint32_t size(dimensions dims) {
     switch (dims) {
       case dimensions::XY:
-        return {0, 1, -1, -1};
+        return 2;
       case dimensions::XYZ:
-        return {0, 1, 2, -1};
       case dimensions::XYM:
-        return {0, 1, -1, 2};
+        return 3;
       case dimensions::XYZM:
-        return {0, 1, 2, 3};
-      default:
-        throw ParquetException("Unknown geometry dimension");
+        return 4;
     }
   }
 
@@ -88,41 +76,6 @@ struct Dimensions {
     }
   }
 };
-
-template <>
-constexpr uint32_t Dimensions::size<Dimensions::dimensions::XY>() {
-  return 2;
-}
-
-template <>
-constexpr uint32_t Dimensions::size<Dimensions::dimensions::XYZ>() {
-  return 3;
-}
-
-template <>
-constexpr uint32_t Dimensions::size<Dimensions::dimensions::XYM>() {
-  return 3;
-}
-
-template <>
-constexpr uint32_t Dimensions::size<Dimensions::dimensions::XYZM>() {
-  return 4;
-}
-
-inline uint32_t Dimensions::size(dimensions dims) {
-  switch (dims) {
-    case dimensions::XY:
-      return size<dimensions::XY>();
-    case dimensions::XYZ:
-      return size<dimensions::XYZ>();
-    case dimensions::XYM:
-      return size<dimensions::XYM>();
-    case dimensions::XYZM:
-      return size<dimensions::XYZM>();
-    default:
-      throw ParquetException("Unknown geometry dimension");
-  }
-}
 
 struct GeometryType {
   enum class geometry_type {
@@ -247,7 +200,7 @@ class WKBBuffer {
   uint32_t ReadUInt32() {
     if (size_ < sizeof(uint32_t)) {
       throw ParquetException("Can't read 4 bytes from WKBBuffer with ", size_,
-                             "remaining");
+                             " remaining");
     }
 
     uint32_t value;
@@ -262,25 +215,35 @@ class WKBBuffer {
     return value;
   }
 
-  template <bool swap>
-  void ReadDoubles(uint32_t n, double* out) {
-    if (n == 0) {
+  template <typename Coord, typename Func>
+  void ReadDoubles(uint32_t n_coords, bool swap, Func&& func) {
+    if (n_coords == 0) {
       return;
     }
 
-    size_t total_bytes = n * sizeof(double);
+    size_t total_bytes = n_coords * sizeof(Coord);
     if (size_ < total_bytes) {
       throw ParquetException("Can't read ", total_bytes, " bytes from WKBBuffer with ",
-                             size_, "remaining");
+                             size_, " remaining");
     }
 
-    memcpy(out, data_, total_bytes);
-    data_ += total_bytes;
-    size_ -= total_bytes;
+    if (ARROW_PREDICT_FALSE(swap)) {
+      Coord coord;
+      for (uint32_t i = 0; i < n_coords; i++) {
+        coord = ::arrow::util::SafeLoadAs<Coord>(data_);
+        for (uint32_t j = 0; j < coord.size(); j++) {
+          coord[j] = ::arrow::bit_util::ByteSwap(coord[j]);
+        }
 
-    if constexpr (swap) {
-      for (uint32_t i = 0; i < n; i++) {
-        out[i] = ::arrow::bit_util::ByteSwap(out[i]);
+        func(coord);
+        data_ += sizeof(Coord);
+        size_ -= sizeof(Coord);
+      }
+    } else {
+      for (uint32_t i = 0; i < n_coords; i++) {
+        func(::arrow::util::SafeLoadAs<Coord>(data_));
+        data_ += sizeof(Coord);
+        size_ -= sizeof(Coord);
       }
     }
   }
@@ -293,19 +256,29 @@ class WKBBuffer {
 };
 
 struct BoundingBox {
-  BoundingBox(Dimensions::dimensions dimensions, const std::array<double, 4>& mins,
-              const std::array<double, 4>& maxes)
-      : dimensions(dimensions) {
+  BoundingBox(const std::array<double, 4>& mins, const std::array<double, 4>& maxes) {
     std::memcpy(min, mins.data(), sizeof(min));
     std::memcpy(max, maxes.data(), sizeof(max));
   }
-  explicit BoundingBox(Dimensions::dimensions dimensions = Dimensions::dimensions::XYZM)
-      : dimensions(dimensions),
-        min{kInf, kInf, kInf, kInf},
-        max{-kInf, -kInf, -kInf, -kInf} {}
+  explicit BoundingBox() : min{kInf, kInf, kInf, kInf}, max{-kInf, -kInf, -kInf, -kInf} {}
 
   BoundingBox(const BoundingBox& other) = default;
   BoundingBox& operator=(const BoundingBox&) = default;
+
+  void UpdateXY(std::array<double, 2> coord) { UpdateInternal(coord); }
+
+  void UpdateXYZ(std::array<double, 3> coord) { UpdateInternal(coord); }
+
+  void UpdateXYM(std::array<double, 3> coord) {
+    min[0] = std::min(min[0], coord[0]);
+    min[1] = std::min(min[1], coord[1]);
+    min[3] = std::min(min[3], coord[2]);
+    max[0] = std::max(max[0], coord[0]);
+    max[1] = std::max(max[1], coord[1]);
+    max[3] = std::max(max[3], coord[2]);
+  }
+
+  void UpdateXYZM(std::array<double, 4> coord) { UpdateInternal(coord); }
 
   void Reset() {
     for (int i = 0; i < 4; i++) {
@@ -315,41 +288,15 @@ struct BoundingBox {
   }
 
   void Merge(const BoundingBox& other) {
-    if (ARROW_PREDICT_TRUE(dimensions == other.dimensions)) {
-      for (int i = 0; i < 4; i++) {
-        min[i] = std::min(min[i], other.min[i]);
-        max[i] = std::max(max[i], other.max[i]);
-      }
-
-      return;
-    } else if (dimensions == Dimensions::dimensions::XYZM) {
-      Merge(other.ToXYZM());
-    } else {
-      ParquetException::NYI();
-    }
-  }
-
-  BoundingBox ToXYZM() const {
-    BoundingBox xyzm(Dimensions::dimensions::XYZM);
-    auto to_xyzm = Dimensions::ToXYZM(dimensions);
     for (int i = 0; i < 4; i++) {
-      int dim_to_xyzm = to_xyzm[i];
-      if (dim_to_xyzm == -1) {
-        xyzm.min[i] = kInf;
-        xyzm.max[i] = -kInf;
-      } else {
-        xyzm.min[i] = min[dim_to_xyzm];
-        xyzm.max[i] = max[dim_to_xyzm];
-      }
+      min[i] = std::min(min[i], other.min[i]);
+      max[i] = std::max(max[i], other.max[i]);
     }
-
-    return xyzm;
   }
 
   std::string ToString() const {
     std::stringstream ss;
-    ss << "BoundingBox " << Dimensions::ToString(dimensions) << " [" << min[0] << " => "
-       << max[0];
+    ss << "BoundingBox [" << min[0] << " => " << max[0];
     for (int i = 1; i < 4; i++) {
       ss << ", " << min[i] << " => " << max[i];
     }
@@ -359,230 +306,30 @@ struct BoundingBox {
     return ss.str();
   }
 
-  Dimensions::dimensions dimensions;
   double min[4];
   double max[4];
+
+ private:
+  // This works for XY, XYZ, and XYZM
+  template <typename Coord>
+  void UpdateInternal(Coord coord) {
+    static_assert(coord.size() <= 4);
+
+    for (size_t i = 0; i < coord.size(); i++) {
+      min[i] = std::min(min[i], coord[i]);
+      max[i] = std::max(max[i], coord[i]);
+    }
+  }
 };
 
 inline bool operator==(const BoundingBox& lhs, const BoundingBox& rhs) {
-  return lhs.dimensions == rhs.dimensions &&
-         std::memcmp(lhs.min, rhs.min, sizeof(lhs.min)) == 0 &&
+  return std::memcmp(lhs.min, rhs.min, sizeof(lhs.min)) == 0 &&
          std::memcmp(lhs.max, rhs.max, sizeof(lhs.max)) == 0;
 }
 
-template <Dimensions::dimensions dims, bool swap, uint32_t chunk_size>
-class WKBSequenceBounder {
- public:
-  explicit WKBSequenceBounder(double* chunk) : box_(dims), chunk_(chunk) {}
-  WKBSequenceBounder(const WKBSequenceBounder&) = default;
-
-  void ReadPoint(WKBBuffer* src) {
-    constexpr uint32_t coord_size = Dimensions::size<dims>();
-    src->ReadDoubles<swap>(coord_size, chunk_);
-    for (uint32_t dim = 0; dim < coord_size; dim++) {
-      if (ARROW_PREDICT_TRUE(!std::isnan(chunk_[dim]))) {
-        box_.min[dim] = std::min(box_.min[dim], chunk_[dim]);
-        box_.max[dim] = std::max(box_.max[dim], chunk_[dim]);
-      }
-    }
-  }
-
-  void ReadSequence(WKBBuffer* src) {
-    constexpr uint32_t coord_size = Dimensions::size<dims>();
-    constexpr uint32_t coords_per_chunk = chunk_size / coord_size;
-
-    uint32_t n_coords = src->ReadUInt32<swap>();
-    uint32_t n_chunks = n_coords / coords_per_chunk;
-    for (uint32_t i = 0; i < n_chunks; i++) {
-      src->ReadDoubles<swap>(coords_per_chunk * coord_size, chunk_);
-      ReadChunk(coords_per_chunk);
-    }
-
-    uint32_t remaining_coords = n_coords - (n_chunks * coords_per_chunk);
-    src->ReadDoubles<swap>(remaining_coords * coord_size, chunk_);
-    ReadChunk(remaining_coords);
-  }
-
-  void ReadRings(WKBBuffer* src) {
-    uint32_t n_rings = src->ReadUInt32<swap>();
-    for (uint32_t i = 0; i < n_rings; i++) {
-      ReadSequence(src);
-    }
-  }
-
-  void Reset() { box_.Reset(); }
-
-  void Finish(BoundingBox* out) { out->Merge(box_); }
-
- private:
-  BoundingBox box_;
-  double* chunk_;
-
-  void ReadChunk(uint32_t n_coords) {
-    constexpr uint32_t coord_size = Dimensions::size<dims>();
-    for (uint32_t dim = 0; dim < coord_size; dim++) {
-      for (uint32_t i = 0; i < n_coords; i++) {
-        box_.min[dim] = std::min(box_.min[dim], chunk_[i * coord_size + dim]);
-        box_.max[dim] = std::max(box_.max[dim], chunk_[i * coord_size + dim]);
-      }
-    }
-  }
-};
-
-// We could (should?) avoid this madness by not templating the WKBSequenceBounder
-class WKBGenericSequenceBounder {
- public:
-  WKBGenericSequenceBounder()
-      : chunk_{0.0},
-        xy_(chunk_),
-        xyz_(chunk_),
-        xym_(chunk_),
-        xyzm_(chunk_),
-        xy_swap_(chunk_),
-        xyz_swap_(chunk_),
-        xym_swap_(chunk_),
-        xyzm_swap_(chunk_) {}
-  WKBGenericSequenceBounder(const WKBGenericSequenceBounder&) = default;
-
-  void ReadPoint(WKBBuffer* src, Dimensions::dimensions dimensions, bool swap) {
-    if (ARROW_PREDICT_TRUE(!swap)) {
-      switch (dimensions) {
-        case Dimensions::dimensions::XY:
-          xy_.ReadPoint(src);
-          break;
-        case Dimensions::dimensions::XYZ:
-          xyz_.ReadPoint(src);
-          break;
-        case Dimensions::dimensions::XYM:
-          xym_.ReadPoint(src);
-          break;
-        case Dimensions::dimensions::XYZM:
-          xyzm_.ReadPoint(src);
-          break;
-      }
-    } else {
-      switch (dimensions) {
-        case Dimensions::dimensions::XY:
-          xy_swap_.ReadPoint(src);
-          break;
-        case Dimensions::dimensions::XYZ:
-          xyz_swap_.ReadPoint(src);
-          break;
-        case Dimensions::dimensions::XYM:
-          xym_swap_.ReadPoint(src);
-          break;
-        case Dimensions::dimensions::XYZM:
-          xyzm_swap_.ReadPoint(src);
-          break;
-      }
-    }
-  }
-
-  void ReadSequence(WKBBuffer* src, Dimensions::dimensions dimensions, bool swap) {
-    if (ARROW_PREDICT_TRUE(!swap)) {
-      switch (dimensions) {
-        case Dimensions::dimensions::XY:
-          xy_.ReadSequence(src);
-          break;
-        case Dimensions::dimensions::XYZ:
-          xyz_.ReadSequence(src);
-          break;
-        case Dimensions::dimensions::XYM:
-          xym_.ReadSequence(src);
-          break;
-        case Dimensions::dimensions::XYZM:
-          xyzm_.ReadSequence(src);
-          break;
-      }
-    } else {
-      switch (dimensions) {
-        case Dimensions::dimensions::XY:
-          xy_swap_.ReadSequence(src);
-          break;
-        case Dimensions::dimensions::XYZ:
-          xyz_swap_.ReadSequence(src);
-          break;
-        case Dimensions::dimensions::XYM:
-          xym_swap_.ReadSequence(src);
-          break;
-        case Dimensions::dimensions::XYZM:
-          xyzm_swap_.ReadSequence(src);
-          break;
-      }
-    }
-  }
-
-  void ReadRings(WKBBuffer* src, Dimensions::dimensions dimensions, bool swap) {
-    if (ARROW_PREDICT_TRUE(!swap)) {
-      switch (dimensions) {
-        case Dimensions::dimensions::XY:
-          xy_.ReadRings(src);
-          break;
-        case Dimensions::dimensions::XYZ:
-          xyz_.ReadRings(src);
-          break;
-        case Dimensions::dimensions::XYM:
-          xym_.ReadRings(src);
-          break;
-        case Dimensions::dimensions::XYZM:
-          xyzm_.ReadRings(src);
-          break;
-      }
-    } else {
-      switch (dimensions) {
-        case Dimensions::dimensions::XY:
-          xy_swap_.ReadRings(src);
-          break;
-        case Dimensions::dimensions::XYZ:
-          xyz_swap_.ReadRings(src);
-          break;
-        case Dimensions::dimensions::XYM:
-          xym_swap_.ReadRings(src);
-          break;
-        case Dimensions::dimensions::XYZM:
-          xyzm_swap_.ReadRings(src);
-          break;
-      }
-    }
-  }
-
-  void Finish(BoundingBox* out) {
-    xy_.Finish(out);
-    xyz_.Finish(out);
-    xym_.Finish(out);
-    xyzm_.Finish(out);
-    xy_swap_.Finish(out);
-    xyz_swap_.Finish(out);
-    xym_swap_.Finish(out);
-    xyzm_swap_.Finish(out);
-  }
-
-  void Reset() {
-    xy_.Reset();
-    xyz_.Reset();
-    xym_.Reset();
-    xyzm_.Reset();
-    xy_swap_.Reset();
-    xyz_swap_.Reset();
-    xym_swap_.Reset();
-    xyzm_swap_.Reset();
-  }
-
- private:
-  double chunk_[64];
-  WKBSequenceBounder<Dimensions::dimensions::XY, false, 64> xy_;
-  WKBSequenceBounder<Dimensions::dimensions::XYZ, false, 64> xyz_;
-  WKBSequenceBounder<Dimensions::dimensions::XYM, false, 64> xym_;
-  WKBSequenceBounder<Dimensions::dimensions::XYZM, false, 64> xyzm_;
-  WKBSequenceBounder<Dimensions::dimensions::XY, true, 64> xy_swap_;
-  WKBSequenceBounder<Dimensions::dimensions::XYZ, true, 64> xyz_swap_;
-  WKBSequenceBounder<Dimensions::dimensions::XYM, true, 64> xym_swap_;
-  WKBSequenceBounder<Dimensions::dimensions::XYZM, true, 64> xyzm_swap_;
-};
-
 class WKBGeometryBounder {
  public:
-  WKBGeometryBounder() : box_(Dimensions::dimensions::XYZM) {}
+  WKBGeometryBounder() = default;
   WKBGeometryBounder(const WKBGeometryBounder&) = default;
 
   void ReadGeometry(WKBBuffer* src, bool record_wkb_type = true) {
@@ -604,14 +351,22 @@ class WKBGeometryBounder {
 
     switch (geometry_type) {
       case GeometryType::geometry_type::POINT:
-        bounder_.ReadPoint(src, dimensions, swap);
+        ReadSequence(src, dimensions, 1, swap);
         break;
-      case GeometryType::geometry_type::LINESTRING:
-        bounder_.ReadSequence(src, dimensions, swap);
+
+      case GeometryType::geometry_type::LINESTRING: {
+        uint32_t n_coords = src->ReadUInt32(swap);
+        ReadSequence(src, dimensions, n_coords, swap);
         break;
-      case GeometryType::geometry_type::POLYGON:
-        bounder_.ReadRings(src, dimensions, swap);
+      }
+      case GeometryType::geometry_type::POLYGON: {
+        uint32_t n_parts = src->ReadUInt32(swap);
+        for (uint32_t i = 0; i < n_parts; i++) {
+          uint32_t n_coords = src->ReadUInt32(swap);
+          ReadSequence(src, dimensions, n_coords, swap);
+        }
         break;
+      }
 
       // These are all encoded the same in WKB, even though this encoding would
       // allow for parts to be of a different geometry type or different dimensions.
@@ -643,18 +398,38 @@ class WKBGeometryBounder {
     return out;
   }
 
-  void Flush() { bounder_.Finish(&box_); }
-
   void Reset() {
     box_.Reset();
-    bounder_.Reset();
     geospatial_types_.clear();
   }
 
  private:
   BoundingBox box_;
-  WKBGenericSequenceBounder bounder_;
   std::unordered_set<int32_t> geospatial_types_;
+
+  void ReadSequence(WKBBuffer* src, Dimensions::dimensions dimensions, uint32_t n_coords,
+                    bool swap) {
+    using XY = std::array<double, 2>;
+    using XYZ = std::array<double, 3>;
+    using XYM = std::array<double, 3>;
+    using XYZM = std::array<double, 4>;
+
+    switch (dimensions) {
+      case Dimensions::dimensions::XY:
+        src->ReadDoubles<XY>(n_coords, swap, [&](XY coord) { box_.UpdateXY(coord); });
+        break;
+      case Dimensions::dimensions::XYZ:
+        src->ReadDoubles<XYZ>(n_coords, swap, [&](XYZ coord) { box_.UpdateXYZ(coord); });
+        break;
+      case Dimensions::dimensions::XYM:
+        src->ReadDoubles<XYM>(n_coords, swap, [&](XYM coord) { box_.UpdateXYM(coord); });
+        break;
+      case Dimensions::dimensions::XYZM:
+        src->ReadDoubles<XYZM>(n_coords, swap,
+                               [&](XYZM coord) { box_.UpdateXYZM(coord); });
+        break;
+    }
+  }
 };
 
 #if defined(ARROW_LITTLE_ENDIAN)
@@ -672,17 +447,17 @@ static inline std::string MakeWKBPoint(const double* xyzm, bool has_z, bool has_
   ptr[0] = kWkbNativeEndianness;
   uint32_t geom_type = geometry::GeometryType::ToWKB(
       geometry::GeometryType::geometry_type::POINT, has_z, has_m);
-  memcpy(&ptr[1], &geom_type, 4);
-  memcpy(&ptr[5], &xyzm[0], 8);
-  memcpy(&ptr[13], &xyzm[1], 8);
+  std::memcpy(&ptr[1], &geom_type, 4);
+  std::memcpy(&ptr[5], &xyzm[0], 8);
+  std::memcpy(&ptr[13], &xyzm[1], 8);
   ptr += 21;
 
   if (has_z) {
-    memcpy(ptr, &xyzm[2], 8);
+    std::memcpy(ptr, &xyzm[2], 8);
     ptr += 8;
   }
   if (has_m) {
-    memcpy(ptr, &xyzm[3], 8);
+    std::memcpy(ptr, &xyzm[3], 8);
   }
 
   return wkb;

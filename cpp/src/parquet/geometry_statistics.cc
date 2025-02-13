@@ -21,6 +21,7 @@
 #include "arrow/array.h"
 #include "arrow/type.h"
 #include "arrow/util/bit_run_reader.h"
+#include "arrow/util/logging.h"
 #include "parquet/geometry_util_internal.h"
 
 using arrow::util::SafeLoad;
@@ -78,8 +79,6 @@ class GeospatialStatisticsImpl {
         buf.Init(item.ptr, item.len);
         bounder_.ReadGeometry(&buf);
       }
-
-      bounder_.Flush();
     } catch (ParquetException&) {
       is_valid_ = false;
     }
@@ -101,7 +100,6 @@ class GeospatialStatisticsImpl {
               bounder_.ReadGeometry(&buf);
             }
           });
-      bounder_.Flush();
     } catch (ParquetException&) {
       is_valid_ = false;
     }
@@ -117,7 +115,6 @@ class GeospatialStatisticsImpl {
           buf.Init(reinterpret_cast<const uint8_t*>(byte_array.data()),
                    byte_array.length());
           bounder_.ReadGeometry(&buf);
-          bounder_.Flush();
         }
       }
     } catch (ParquetException&) {

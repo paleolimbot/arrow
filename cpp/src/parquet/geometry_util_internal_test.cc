@@ -20,8 +20,6 @@
 #include <cmath>
 #include <cstring>
 
-#include "arrow/testing/gtest_compat.h"
-
 #include "parquet/geometry_util_internal.h"
 
 namespace parquet::geometry {
@@ -71,31 +69,23 @@ TEST(TestGeometryUtil, TestGeometryType) {
 
 TEST(TestGeometryUtil, TestBoundingBox) {
   BoundingBox box;
-  EXPECT_EQ(box, BoundingBox(Dimensions::dimensions::XYZM, {kInf, kInf, kInf, kInf},
-                             {-kInf, -kInf, -kInf, -kInf}));
+  EXPECT_EQ(box, BoundingBox({kInf, kInf, kInf, kInf}, {-kInf, -kInf, -kInf, -kInf}));
   EXPECT_EQ(box.ToString(),
-            "BoundingBox XYZM [inf => -inf, inf => -inf, inf => -inf, inf => -inf]");
+            "BoundingBox [inf => -inf, inf => -inf, inf => -inf, inf => -inf]");
 
-  BoundingBox box_xyzm(Dimensions::dimensions::XYZM, {-1, -2, -3, -4}, {1, 2, 3, 4});
-
-  BoundingBox box_xy(Dimensions::dimensions::XY, {-10, -20, kInf, kInf},
-                     {10, 20, -kInf, -kInf});
-  BoundingBox box_xyz(Dimensions::dimensions::XYZ, {kInf, kInf, -30, kInf},
-                      {-kInf, -kInf, 30, -kInf});
-  BoundingBox box_xym(Dimensions::dimensions::XYM, {kInf, kInf, -40, kInf},
-                      {-kInf, -kInf, 40, -kInf});
+  BoundingBox box_xyzm({-1, -2, -3, -4}, {1, 2, 3, 4});
+  BoundingBox box_xy({-10, -20, kInf, kInf}, {10, 20, -kInf, -kInf});
+  BoundingBox box_xyz({kInf, kInf, -30, kInf}, {-kInf, -kInf, 30, -kInf});
+  BoundingBox box_xym({kInf, kInf, kInf, -40}, {-kInf, -kInf, -kInf, 40});
 
   box_xyzm.Merge(box_xy);
-  EXPECT_EQ(box_xyzm, BoundingBox(Dimensions::dimensions::XYZM, {-10, -20, -3, -4},
-                                  {10, 20, 3, 4}));
+  EXPECT_EQ(box_xyzm, BoundingBox({-10, -20, -3, -4}, {10, 20, 3, 4}));
 
   box_xyzm.Merge(box_xyz);
-  EXPECT_EQ(box_xyzm, BoundingBox(Dimensions::dimensions::XYZM, {-10, -20, -30, -4},
-                                  {10, 20, 30, 4}));
+  EXPECT_EQ(box_xyzm, BoundingBox({-10, -20, -30, -4}, {10, 20, 30, 4}));
 
   box_xyzm.Merge(box_xym);
-  EXPECT_EQ(box_xyzm, BoundingBox(Dimensions::dimensions::XYZM, {-10, -20, -30, -40},
-                                  {10, 20, 30, 40}));
+  EXPECT_EQ(box_xyzm, BoundingBox({-10, -20, -30, -40}, {10, 20, 30, 40}));
 
   box_xyzm.Reset();
   EXPECT_EQ(box_xyzm, BoundingBox());
@@ -108,11 +98,18 @@ struct WKBTestCase {
       : geometry_type(x), dimensions(y), wkb(z) {
     std::array<double, 4> mins = {kInf, kInf, kInf, kInf};
     std::array<double, 4> maxes{-kInf, -kInf, -kInf, -kInf};
-    for (uint32_t i = 0; i < Dimensions::size(y); i++) {
-      mins[i] = box_values[i];
-      maxes[i] = box_values[Dimensions::size(y) + i];
+
+    if (dimensions == Dimensions::dimensions::XYM) {
+      mins = {box_values[0], box_values[1], kInf, box_values[2]};
+      maxes = {box_values[3], box_values[4], -kInf, box_values[5]};
+    } else {
+      for (uint32_t i = 0; i < Dimensions::size(y); i++) {
+        mins[i] = box_values[i];
+        maxes[i] = box_values[Dimensions::size(y) + i];
+      }
     }
-    box = BoundingBox(y, mins, maxes).ToXYZM();
+
+    box = BoundingBox(mins, maxes);
   }
   WKBTestCase(const WKBTestCase& other) = default;
 
@@ -148,7 +145,6 @@ TEST_P(WKBTestFixture, TestWKBBounderNonEmpty) {
   bounder.ReadGeometry(&buf);
   EXPECT_EQ(buf.size(), 0);
 
-  bounder.Flush();
   EXPECT_EQ(bounder.Bounds(), item.box);
   uint32_t wkb_type =
       static_cast<int>(item.dimensions) * 1000 + static_cast<int>(item.geometry_type);
@@ -481,7 +477,6 @@ TEST_P(MakeWKBPointTestFixture, MakeWKBPoint) {
   WKBGeometryBounder bounder;
   WKBBuffer buf(reinterpret_cast<uint8_t*>(wkb.data()), wkb.size());
   bounder.ReadGeometry(&buf);
-  bounder.Flush();
   const double* mins = bounder.Bounds().min;
   EXPECT_DOUBLE_EQ(param.xyzm[0], mins[0]);
   EXPECT_DOUBLE_EQ(param.xyzm[1], mins[1]);
