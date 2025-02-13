@@ -32,20 +32,85 @@ namespace parquet::geometry {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
 
-struct Dimensions {
-  enum class dimensions { XY = 0, XYZ = 1, XYM = 2, XYZM = 3 };
+enum class Dimensions { XY = 0, XYZ = 1, XYM = 2, XYZM = 3 };
+
+enum class GeometryType {
+  POINT = 1,
+  LINESTRING = 2,
+  POLYGON = 3,
+  MULTIPOINT = 4,
+  MULTILINESTRING = 5,
+  MULTIPOLYGON = 6,
+  GEOMETRYCOLLECTION = 7
 };
 
-struct GeometryType {
-  enum class geometry_type {
-    POINT = 1,
-    LINESTRING = 2,
-    POLYGON = 3,
-    MULTIPOINT = 4,
-    MULTILINESTRING = 5,
-    MULTIPOLYGON = 6,
-    GEOMETRYCOLLECTION = 7
-  };
+struct BoundingBox {
+  using XY = std::array<double, 2>;
+  using XYZ = std::array<double, 3>;
+  using XYM = std::array<double, 3>;
+  using XYZM = std::array<double, 4>;
+
+  BoundingBox(const XYZM& mins, const XYZM& maxes) : min(mins), max(maxes) {}
+  BoundingBox() : min{kInf, kInf, kInf, kInf}, max{-kInf, -kInf, -kInf, -kInf} {}
+
+  BoundingBox(const BoundingBox& other) = default;
+  BoundingBox& operator=(const BoundingBox&) = default;
+
+  void UpdateXY(const XY& coord) { UpdateInternal(coord); }
+
+  void UpdateXYZ(const XYZ& coord) { UpdateInternal(coord); }
+
+  void UpdateXYM(const XYM& coord) {
+    min[0] = std::min(min[0], coord[0]);
+    min[1] = std::min(min[1], coord[1]);
+    min[3] = std::min(min[3], coord[2]);
+    max[0] = std::max(max[0], coord[0]);
+    max[1] = std::max(max[1], coord[1]);
+    max[3] = std::max(max[3], coord[2]);
+  }
+
+  void UpdateXYZM(const XYZM& coord) { UpdateInternal(coord); }
+
+  void Reset() {
+    for (int i = 0; i < 4; i++) {
+      min[i] = kInf;
+      max[i] = -kInf;
+    }
+  }
+
+  void Merge(const BoundingBox& other) {
+    for (int i = 0; i < 4; i++) {
+      min[i] = std::min(min[i], other.min[i]);
+      max[i] = std::max(max[i], other.max[i]);
+    }
+  }
+
+  std::string ToString() const {
+    std::stringstream ss;
+    ss << "BoundingBox [" << min[0] << " => " << max[0];
+    for (int i = 1; i < 4; i++) {
+      ss << ", " << min[i] << " => " << max[i];
+    }
+
+    ss << "]";
+
+    return ss.str();
+  }
+
+  XYZM min;
+  XYZM max;
+
+ private:
+  // This works for XY, XYZ, and XYZM
+  template <typename Coord>
+  void UpdateInternal(Coord coord) {
+    static_assert(coord.size() <= 4);
+
+    for (size_t i = 0; i < coord.size(); i++) {
+      min[i] = std::min(min[i], coord[i]);
+      max[i] = std::max(max[i], coord[i]);
+    }
+  }
 };
 
 class WKBBuffer {
@@ -127,81 +192,8 @@ class WKBBuffer {
   }
 };
 
-struct BoundingBox {
-  using XY = std::array<double, 2>;
-  using XYZ = std::array<double, 3>;
-  using XYM = std::array<double, 3>;
-  using XYZM = std::array<double, 4>;
-
-  BoundingBox(const XYZM& mins, const XYZM& maxes) {
-    std::memcpy(min, mins.data(), sizeof(min));
-    std::memcpy(max, maxes.data(), sizeof(max));
-  }
-  BoundingBox() : min{kInf, kInf, kInf, kInf}, max{-kInf, -kInf, -kInf, -kInf} {}
-
-  BoundingBox(const BoundingBox& other) = default;
-  BoundingBox& operator=(const BoundingBox&) = default;
-
-  void UpdateXY(const XY& coord) { UpdateInternal(coord); }
-
-  void UpdateXYZ(const XYZ& coord) { UpdateInternal(coord); }
-
-  void UpdateXYM(const XYM& coord) {
-    min[0] = std::min(min[0], coord[0]);
-    min[1] = std::min(min[1], coord[1]);
-    min[3] = std::min(min[3], coord[2]);
-    max[0] = std::max(max[0], coord[0]);
-    max[1] = std::max(max[1], coord[1]);
-    max[3] = std::max(max[3], coord[2]);
-  }
-
-  void UpdateXYZM(const XYZM& coord) { UpdateInternal(coord); }
-
-  void Reset() {
-    for (int i = 0; i < 4; i++) {
-      min[i] = kInf;
-      max[i] = -kInf;
-    }
-  }
-
-  void Merge(const BoundingBox& other) {
-    for (int i = 0; i < 4; i++) {
-      min[i] = std::min(min[i], other.min[i]);
-      max[i] = std::max(max[i], other.max[i]);
-    }
-  }
-
-  std::string ToString() const {
-    std::stringstream ss;
-    ss << "BoundingBox [" << min[0] << " => " << max[0];
-    for (int i = 1; i < 4; i++) {
-      ss << ", " << min[i] << " => " << max[i];
-    }
-
-    ss << "]";
-
-    return ss.str();
-  }
-
-  double min[4];
-  double max[4];
-
- private:
-  // This works for XY, XYZ, and XYZM
-  template <typename Coord>
-  void UpdateInternal(Coord coord) {
-    static_assert(coord.size() <= 4);
-
-    for (size_t i = 0; i < coord.size(); i++) {
-      min[i] = std::min(min[i], coord[i]);
-      max[i] = std::max(max[i], coord[i]);
-    }
-  }
-};
-
 inline bool operator==(const BoundingBox& lhs, const BoundingBox& rhs) {
-  return std::memcmp(lhs.min, rhs.min, sizeof(lhs.min)) == 0 &&
-         std::memcmp(lhs.max, rhs.max, sizeof(lhs.max)) == 0;
+  return lhs.min == rhs.min && lhs.max == rhs.max;
 }
 
 class WKBGeometryBounder {
@@ -234,8 +226,7 @@ class WKBGeometryBounder {
   BoundingBox box_;
   std::unordered_set<int32_t> geospatial_types_;
 
-  using GeometryTypeAndDimensions =
-      std::pair<GeometryType::geometry_type, Dimensions::dimensions>;
+  using GeometryTypeAndDimensions = std::pair<GeometryType, Dimensions>;
 
   ::arrow::Status ReadGeometryInternal(WKBBuffer* src, bool record_wkb_type = true) {
     ARROW_ASSIGN_OR_RAISE(uint8_t endian, src->ReadUInt8());
@@ -255,18 +246,18 @@ class WKBGeometryBounder {
     }
 
     switch (geometry_type_and_dimensions.first) {
-      case GeometryType::geometry_type::POINT:
+      case GeometryType::POINT:
         ARROW_RETURN_NOT_OK(
             ReadSequence(src, geometry_type_and_dimensions.second, 1, swap));
         break;
 
-      case GeometryType::geometry_type::LINESTRING: {
+      case GeometryType::LINESTRING: {
         ARROW_ASSIGN_OR_RAISE(uint32_t n_coords, src->ReadUInt32(swap));
         ARROW_RETURN_NOT_OK(
             ReadSequence(src, geometry_type_and_dimensions.second, n_coords, swap));
         break;
       }
-      case GeometryType::geometry_type::POLYGON: {
+      case GeometryType::POLYGON: {
         ARROW_ASSIGN_OR_RAISE(uint32_t n_parts, src->ReadUInt32(swap));
         for (uint32_t i = 0; i < n_parts; i++) {
           ARROW_ASSIGN_OR_RAISE(uint32_t n_coords, src->ReadUInt32(swap));
@@ -279,10 +270,10 @@ class WKBGeometryBounder {
       // These are all encoded the same in WKB, even though this encoding would
       // allow for parts to be of a different geometry type or different dimensions.
       // For the purposes of bounding, this does not cause us problems.
-      case GeometryType::geometry_type::MULTIPOINT:
-      case GeometryType::geometry_type::MULTILINESTRING:
-      case GeometryType::geometry_type::MULTIPOLYGON:
-      case GeometryType::geometry_type::GEOMETRYCOLLECTION: {
+      case GeometryType::MULTIPOINT:
+      case GeometryType::MULTILINESTRING:
+      case GeometryType::MULTIPOLYGON:
+      case GeometryType::GEOMETRYCOLLECTION: {
         ARROW_ASSIGN_OR_RAISE(uint32_t n_parts, src->ReadUInt32(swap));
         for (uint32_t i = 0; i < n_parts; i++) {
           ARROW_RETURN_NOT_OK(ReadGeometryInternal(src, /*record_wkb_type*/ false));
@@ -294,19 +285,19 @@ class WKBGeometryBounder {
     return ::arrow::Status::OK();
   }
 
-  ::arrow::Status ReadSequence(WKBBuffer* src, Dimensions::dimensions dimensions,
-                               uint32_t n_coords, bool swap) {
+  ::arrow::Status ReadSequence(WKBBuffer* src, Dimensions dimensions, uint32_t n_coords,
+                               bool swap) {
     switch (dimensions) {
-      case Dimensions::dimensions::XY:
+      case Dimensions::XY:
         return src->ReadDoubles<BoundingBox::XY>(
             n_coords, swap, [&](BoundingBox::XY coord) { box_.UpdateXY(coord); });
-      case Dimensions::dimensions::XYZ:
+      case Dimensions::XYZ:
         return src->ReadDoubles<BoundingBox::XYZ>(
             n_coords, swap, [&](BoundingBox::XYZ coord) { box_.UpdateXYZ(coord); });
-      case Dimensions::dimensions::XYM:
+      case Dimensions::XYM:
         return src->ReadDoubles<BoundingBox::XYM>(
             n_coords, swap, [&](BoundingBox::XYM coord) { box_.UpdateXYM(coord); });
-      case Dimensions::dimensions::XYZM:
+      case Dimensions::XYZM:
         return src->ReadDoubles<BoundingBox::XYZM>(
             n_coords, swap, [&](BoundingBox::XYZM coord) { box_.UpdateXYZM(coord); });
       default:
@@ -322,12 +313,11 @@ class WKBGeometryBounder {
     uint32_t geometry_type_component = wkb_geometry_type % 1000;
     uint32_t dimensions_component = wkb_geometry_type / 1000;
 
-    auto min_geometry_type_value =
-        static_cast<uint32_t>(GeometryType::geometry_type::POINT);
+    auto min_geometry_type_value = static_cast<uint32_t>(GeometryType::POINT);
     auto max_geometry_type_value =
-        static_cast<uint32_t>(GeometryType::geometry_type::GEOMETRYCOLLECTION);
-    auto min_dimension_value = static_cast<uint32_t>(Dimensions::dimensions::XY);
-    auto max_dimension_value = static_cast<uint32_t>(Dimensions::dimensions::XYZM);
+        static_cast<uint32_t>(GeometryType::GEOMETRYCOLLECTION);
+    auto min_dimension_value = static_cast<uint32_t>(Dimensions::XY);
+    auto max_dimension_value = static_cast<uint32_t>(Dimensions::XYZM);
 
     if (geometry_type_component < min_geometry_type_value ||
         geometry_type_component > max_geometry_type_value ||
@@ -337,9 +327,8 @@ class WKBGeometryBounder {
                                                  wkb_geometry_type);
     }
 
-    GeometryTypeAndDimensions out{
-        static_cast<GeometryType::geometry_type>(geometry_type_component),
-        static_cast<Dimensions::dimensions>(dimensions_component)};
+    GeometryTypeAndDimensions out{static_cast<GeometryType>(geometry_type_component),
+                                  static_cast<Dimensions>(dimensions_component)};
     return out;
   }
 };

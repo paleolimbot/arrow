@@ -138,8 +138,8 @@ class GeospatialStatisticsImpl {
   }
 
   EncodedGeospatialStatistics Encode() const {
-    const double* mins = bounder_.Bounds().min;
-    const double* maxes = bounder_.Bounds().max;
+    const geometry::BoundingBox::XYZM& mins = bounder_.Bounds().min;
+    const geometry::BoundingBox::XYZM& maxes = bounder_.Bounds().max;
 
     EncodedGeospatialStatistics out;
     out.geospatial_types = bounder_.GeometryTypes();
@@ -183,9 +183,9 @@ class GeospatialStatisticsImpl {
 
   bool is_valid() const { return is_valid_; }
 
-  const double* GetMinBounds() { return bounder_.Bounds().min; }
+  const std::array<double, 4>& GetMinBounds() const { return bounder_.Bounds().min; }
 
-  const double* GetMaxBounds() { return bounder_.Bounds().max; }
+  const std::array<double, 4>& GetMaxBounds() { return bounder_.Bounds().max; }
 
   std::vector<int32_t> GetGeometryTypes() const { return bounder_.GeometryTypes(); }
 
@@ -251,45 +251,21 @@ std::shared_ptr<GeospatialStatistics> GeospatialStatistics::clone() const {
   return std::make_shared<GeospatialStatistics>(std::move(impl));
 }
 
-double GeospatialStatistics::GetXMin() const {
-  const double* mins = impl_->GetMinBounds();
-  return mins[0];
-}
+double GeospatialStatistics::GetXMin() const { return impl_->GetMinBounds()[0]; }
 
-double GeospatialStatistics::GetXMax() const {
-  const double* maxes = impl_->GetMaxBounds();
-  return maxes[0];
-}
+double GeospatialStatistics::GetXMax() const { return impl_->GetMaxBounds()[0]; }
 
-double GeospatialStatistics::GetYMin() const {
-  const double* mins = impl_->GetMinBounds();
-  return mins[1];
-}
+double GeospatialStatistics::GetYMin() const { return impl_->GetMinBounds()[1]; }
 
-double GeospatialStatistics::GetYMax() const {
-  const double* maxes = impl_->GetMaxBounds();
-  return maxes[1];
-}
+double GeospatialStatistics::GetYMax() const { return impl_->GetMaxBounds()[1]; }
 
-double GeospatialStatistics::GetZMin() const {
-  const double* mins = impl_->GetMinBounds();
-  return mins[2];
-}
+double GeospatialStatistics::GetZMin() const { return impl_->GetMinBounds()[2]; }
 
-double GeospatialStatistics::GetZMax() const {
-  const double* maxes = impl_->GetMaxBounds();
-  return maxes[2];
-}
+double GeospatialStatistics::GetZMax() const { return impl_->GetMaxBounds()[2]; }
 
-double GeospatialStatistics::GetMMin() const {
-  const double* mins = impl_->GetMinBounds();
-  return mins[3];
-}
+double GeospatialStatistics::GetMMin() const { return impl_->GetMinBounds()[3]; }
 
-double GeospatialStatistics::GetMMax() const {
-  const double* maxes = impl_->GetMaxBounds();
-  return maxes[3];
-}
+double GeospatialStatistics::GetMMax() const { return impl_->GetMaxBounds()[3]; }
 
 bool GeospatialStatistics::HasZ() const { return (GetZMax() - GetZMin()) > 0; }
 

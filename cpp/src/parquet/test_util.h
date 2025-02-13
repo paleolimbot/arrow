@@ -26,7 +26,6 @@
 #include <memory>
 #include <random>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -842,8 +841,8 @@ static constexpr uint8_t kWkbNativeEndianness = 0x01;
 static constexpr uint8_t kWkbNativeEndianness = 0x00;
 #endif
 
-static uint32_t GeometryTypeToWKB(geometry::GeometryType::geometry_type geometry_type,
-                                  bool has_z, bool has_m) {
+static uint32_t GeometryTypeToWKB(geometry::GeometryType geometry_type, bool has_z,
+                                  bool has_m) {
   auto wkb_geom_type = static_cast<uint32_t>(geometry_type);
 
   if (has_z) {
@@ -864,8 +863,7 @@ static inline std::string MakeWKBPoint(const double* xyzm, bool has_z, bool has_
   char* ptr = wkb.data();
 
   ptr[0] = kWkbNativeEndianness;
-  uint32_t geom_type =
-      GeometryTypeToWKB(geometry::GeometryType::geometry_type::POINT, has_z, has_m);
+  uint32_t geom_type = GeometryTypeToWKB(geometry::GeometryType::POINT, has_z, has_m);
   std::memcpy(&ptr[1], &geom_type, 4);
   std::memcpy(&ptr[5], &xyzm[0], 8);
   std::memcpy(&ptr[13], &xyzm[1], 8);
@@ -898,7 +896,7 @@ inline bool GetWKBPointCoordinate(const ByteArray& value, double* out_x, double*
     return false;
   }
   uint32_t expected_geom_type =
-      GeometryTypeToWKB(geometry::GeometryType::geometry_type::POINT, false, false);
+      GeometryTypeToWKB(geometry::GeometryType::POINT, false, false);
   uint32_t geom_type = 0;
   memcpy(&geom_type, &value.ptr[1], 4);
   if (geom_type != expected_geom_type) {
