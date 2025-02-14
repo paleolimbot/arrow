@@ -118,7 +118,7 @@ inline bool operator==(const BoundingBox& lhs, const BoundingBox& rhs) {
 
 class WKBBuffer;
 
-class PARQUET_EXPORT WKBGeometryBounder {
+class WKBGeometryBounder {
  public:
   WKBGeometryBounder() = default;
   WKBGeometryBounder(const WKBGeometryBounder&) = default;

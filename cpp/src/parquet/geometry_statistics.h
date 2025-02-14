@@ -44,9 +44,9 @@ class PARQUET_EXPORT EncodedGeospatialStatistics {
   double mmax{-kInf};
   std::vector<int32_t> geospatial_types;
 
-  bool has_z() const { return (zmax - zmin) >= 0; }
+  bool has_z() const { return (zmax - zmin) != -kInf; }
 
-  bool has_m() const { return (mmax - mmin) >= 0; }
+  bool has_m() const { return (mmax - mmin) != -kInf; }
 
   bool is_set() const { return !geospatial_types.empty(); }
 };
