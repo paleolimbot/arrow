@@ -74,11 +74,9 @@ class GeospatialStatisticsImpl {
       return;
     }
 
-    geometry::WKBBuffer buf;
     for (int64_t i = 0; i < num_values; i++) {
       const ByteArray& item = values[i];
-      buf.Init(item.ptr, item.len);
-      ::arrow::Status status = bounder_.ReadGeometry(&buf);
+      ::arrow::Status status = bounder_.ReadGeometry(item.ptr, item.len);
       if (!status.ok()) {
         is_valid_ = false;
         return;
@@ -95,14 +93,12 @@ class GeospatialStatisticsImpl {
       return;
     }
 
-    geometry::WKBBuffer buf;
     ::arrow::Status status = ::arrow::internal::VisitSetBitRuns(
         valid_bits, valid_bits_offset, num_spaced_values,
         [&](int64_t position, int64_t length) {
           for (int64_t i = 0; i < length; i++) {
             ByteArray item = SafeLoad(values + i + position);
-            buf.Init(item.ptr, item.len);
-            ARROW_RETURN_NOT_OK(bounder_.ReadGeometry(&buf));
+            ARROW_RETURN_NOT_OK(bounder_.ReadGeometry(item.ptr, item.len));
           }
 
           return ::arrow::Status::OK();
@@ -198,13 +194,11 @@ class GeospatialStatisticsImpl {
   template <typename ArrayType>
   void UpdateArrayImpl(const ::arrow::Array& values) {
     const auto& binary_array = static_cast<const ArrayType&>(values);
-    geometry::WKBBuffer buf;
     for (int64_t i = 0; i < binary_array.length(); ++i) {
       if (!binary_array.IsNull(i)) {
         std::string_view byte_array = binary_array.GetView(i);
-        buf.Init(reinterpret_cast<const uint8_t*>(byte_array.data()),
-                 byte_array.length());
-        ::arrow::Status status = bounder_.ReadGeometry(&buf);
+        ::arrow::Status status = bounder_.ReadGeometry(
+            reinterpret_cast<const uint8_t*>(byte_array.data()), byte_array.length());
         if (!status.ok()) {
           is_valid_ = false;
           return;

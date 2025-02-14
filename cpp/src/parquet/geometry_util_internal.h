@@ -23,11 +23,6 @@
 #include <string>
 #include <unordered_set>
 
-#include "arrow/result.h"
-#include "arrow/util/endian.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/ubsan.h"
-
 #include "parquet/platform.h"
 
 namespace parquet::geometry {
@@ -128,7 +123,7 @@ class PARQUET_EXPORT WKBGeometryBounder {
   WKBGeometryBounder() = default;
   WKBGeometryBounder(const WKBGeometryBounder&) = default;
 
-  ::arrow::Status ReadGeometry(WKBBuffer* src);
+  ::arrow::Status ReadGeometry(const uint8_t* data, int64_t size);
 
   void ReadBox(const BoundingBox& box) { box_.Merge(box); }
 
@@ -157,85 +152,6 @@ class PARQUET_EXPORT WKBGeometryBounder {
 
   ::arrow::Status ReadSequence(WKBBuffer* src, Dimensions dimensions, uint32_t n_coords,
                                bool swap);
-};
-
-class WKBBuffer {
- public:
-  WKBBuffer() : data_(NULLPTR), size_(0) {}
-  WKBBuffer(const uint8_t* data, int64_t size) : data_(data), size_(size) {}
-
-  void Init(const uint8_t* data, int64_t size) {
-    data_ = data;
-    size_ = size;
-  }
-
-  ::arrow::Result<uint8_t> ReadUInt8() { return ReadChecked<uint8_t>(); }
-
-  ::arrow::Result<uint32_t> ReadUInt32(bool swap) {
-    ARROW_ASSIGN_OR_RAISE(auto value, ReadChecked<uint32_t>());
-    if (ARROW_PREDICT_FALSE(swap)) {
-      return value = ByteSwap(value);
-    } else {
-      return value;
-    }
-  }
-
-  template <typename Coord, typename Visit>
-  ::arrow::Status ReadDoubles(uint32_t n_coords, bool swap, Visit&& visit) {
-    size_t total_bytes = n_coords * sizeof(Coord);
-    if (size_ < total_bytes) {
-      return ::arrow::Status::SerializationError(
-          "Can't coordinate sequence of ", total_bytes, " bytes from WKBBuffer with ",
-          size_, " remaining");
-    }
-
-    if (ARROW_PREDICT_FALSE(swap)) {
-      Coord coord;
-      for (uint32_t i = 0; i < n_coords; i++) {
-        coord = ReadUnchecked<Coord>();
-        for (uint32_t j = 0; j < coord.size(); j++) {
-          coord[j] = ByteSwap(coord[j]);
-        }
-
-        visit(coord);
-      }
-    } else {
-      for (uint32_t i = 0; i < n_coords; i++) {
-        visit(ReadUnchecked<Coord>());
-      }
-    }
-
-    return ::arrow::Status::OK();
-  }
-
-  size_t size() { return size_; }
-
- private:
-  const uint8_t* data_;
-  size_t size_;
-
-  template <typename T>
-  ::arrow::Result<T> ReadChecked() {
-    if (size_ < sizeof(T)) {
-      return ::arrow::Status::SerializationError(
-          "Can't read ", sizeof(T), " bytes from WKBBuffer with ", size_, " remaining");
-    }
-
-    return ReadUnchecked<T>();
-  }
-
-  template <typename T>
-  T ReadUnchecked() {
-    T out = ::arrow::util::SafeLoadAs<T>(data_);
-    data_ += sizeof(T);
-    size_ -= sizeof(T);
-    return out;
-  }
-
-  template <typename T>
-  T ByteSwap(T value) {
-    return ::arrow::bit_util::ByteSwap(value);
-  }
 };
 
 }  // namespace parquet::geometry
