@@ -172,6 +172,7 @@ set(PARQUET_SRCS
     file_reader.cc
     file_writer.cc
     geometry_statistics.cc
+    geometry_util_internal.cc
     level_comparison.cc
     level_conversion.cc
     metadata.cc
