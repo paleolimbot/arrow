@@ -135,6 +135,10 @@ class GeospatialStatisticsImpl {
   }
 
   EncodedGeospatialStatistics Encode() const {
+    if (!is_valid_) {
+      return {};
+    }
+
     const geometry::BoundingBox::XYZM& mins = bounder_.Bounds().min;
     const geometry::BoundingBox::XYZM& maxes = bounder_.Bounds().max;
 
