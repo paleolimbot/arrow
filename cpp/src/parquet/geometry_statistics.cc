@@ -22,6 +22,7 @@
 #include "arrow/type.h"
 #include "arrow/util/bit_run_reader.h"
 #include "arrow/util/logging.h"
+#include "parquet/exception.h"
 #include "parquet/geometry_util_internal.h"
 
 using arrow::util::SafeLoad;
@@ -116,7 +117,26 @@ class GeospatialStatisticsImpl {
       return;
     }
 
-    const auto& binary_array = static_cast<const ::arrow::BinaryArray&>(values);
+    switch (values.type_id()) {
+      case ::arrow::Type::BINARY:
+        UpdateArrayImpl<::arrow::BinaryArray>(values);
+        break;
+      case ::arrow::Type::BINARY_VIEW:
+        UpdateArrayImpl<::arrow::BinaryViewArray>(values);
+        break;
+      case ::arrow::Type::LARGE_BINARY:
+        UpdateArrayImpl<::arrow::LargeBinaryArray>(values);
+        break;
+      // This does not currently handle run-end encoded or dictionary encodings
+      default:
+        throw ParquetException(
+            "Unsupported Array type in GeospatialStatistics::Update(Array)");
+    }
+  }
+
+  template <typename ArrayType>
+  void UpdateArrayImpl(const ::arrow::Array& values) {
+    const auto& binary_array = static_cast<const ArrayType&>(values);
     geometry::WKBBuffer buf;
     for (int64_t i = 0; i < binary_array.length(); ++i) {
       if (!binary_array.IsNull(i)) {
