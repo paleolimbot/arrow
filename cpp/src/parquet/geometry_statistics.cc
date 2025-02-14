@@ -59,11 +59,7 @@ class GeospatialStatisticsImpl {
   }
 
   void Merge(const GeospatialStatisticsImpl& other) {
-    if (!is_valid_ || !other.is_valid_) {
-      is_valid_ = false;
-      return;
-    }
-
+    is_valid_ = is_valid_ && other.is_valid_;
     bounder_.ReadBox(other.bounder_.Bounds());
     bounder_.ReadGeometryTypes(other.bounder_.GeometryTypes());
   }

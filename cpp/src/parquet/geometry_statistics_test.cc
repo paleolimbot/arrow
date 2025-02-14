@@ -44,6 +44,9 @@ TEST(TestGeospatialStatistics, TestDefaults) {
   EXPECT_FALSE(encoded.has_z());
   EXPECT_FALSE(encoded.has_m());
   EXPECT_TRUE(GeospatialStatistics(encoded).Equals(stats));
+
+  stats.Merge(GeospatialStatistics());
+  EXPECT_TRUE(GeospatialStatistics(encoded).Equals(stats));
 }
 
 TEST(TestGeospatialStatistics, TestUpdateByteArray) {
@@ -118,6 +121,26 @@ TEST(TestGeospatialStatistics, TestUpdateByteArray) {
   EXPECT_EQ(stats_spaced.GetMMin(), 13);
   EXPECT_EQ(stats_spaced.GetMMax(), 33);
   EXPECT_THAT(stats_spaced.GetGeometryTypes(), ::testing::ElementsAre(3001));
+
+  // Check merge
+  stats.Merge(stats_spaced);
+  EXPECT_TRUE(stats.Equals(stats_spaced));
+
+  // Check ingest of invalid WKB
+  ByteArray invalid;
+  stats.Update(&invalid, 1, 0);
+  EXPECT_FALSE(stats.is_valid());
+  EXPECT_FALSE(stats.Encode().is_set());
+
+  // This should be true even after ingesting more values
+  stats.Update(&item0, 1, 0);
+  EXPECT_FALSE(stats.is_valid());
+  EXPECT_FALSE(stats.Encode().is_set());
+
+  // And should cause other statistics to become invalid when merged with them
+  stats_spaced.Merge(stats);
+  EXPECT_FALSE(stats_spaced.is_valid());
+  EXPECT_FALSE(stats_spaced.Encode().is_set());
 }
 
 TEST(TestGeospatialStatistics, TestUpdateArray) {
@@ -152,6 +175,18 @@ TEST(TestGeospatialStatistics, TestUpdateArray) {
   stats_large.Update(*large_binary_array.make_array());
 
   EXPECT_TRUE(stats_large.Equals(stats));
+}
+
+TEST(TestGeospatialStatistics, TestUpdateArrayInvalid) {
+  // Build WKB array with invalid WKB (here, an empty string)
+  ::arrow::BinaryBuilder builder;
+  ASSERT_OK(builder.AppendValues({std::string()}));
+  ASSERT_OK_AND_ASSIGN(const auto invalid_wkb, builder.Finish());
+
+  GeospatialStatistics stats;
+  stats.Update(*invalid_wkb);
+  EXPECT_FALSE(stats.is_valid());
+  EXPECT_FALSE(stats.Encode().is_set());
 }
 
 }  // namespace parquet::geometry
