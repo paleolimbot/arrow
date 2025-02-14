@@ -19,7 +19,6 @@
 #include <memory>
 
 #include "arrow/array.h"
-#include "arrow/extension_type.h"
 #include "arrow/type.h"
 #include "arrow/util/bit_run_reader.h"
 #include "arrow/util/logging.h"
