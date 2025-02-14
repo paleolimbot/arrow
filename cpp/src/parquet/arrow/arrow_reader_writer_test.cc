@@ -1481,6 +1481,50 @@ TEST_F(TestJsonParquetIO, JsonExtension) {
   this->RoundTripSingleColumn(json_large_array, json_large_array, writer_properties);
 }
 
+using TestGeoArrowParquetIO = TestParquetIO<test::GeoArrowWkbExtensionType>;
+
+TEST_F(TestGeoArrowParquetIO, GeoArrowExtension) {
+  const char* json = R"([
+    "null",
+    "1234",
+    "3.14159",
+    "true",
+    "false",
+    "\"a json string\"",
+    "[\"a\", \"json\", \"array\"]",
+    "{\"obj\": \"a simple json object\"}"
+  ])";
+
+  const auto wkb_type = test::geoarrow_wkb();
+  const auto binary_array = ::arrow::ArrayFromJSON(::arrow::utf8(), json);
+  const auto wkb_array = ::arrow::ExtensionType::WrapArray(wkb_type, binary_array);
+
+  const auto large_wkb_type = test::geoarrow_wkb("{}", ::arrow::large_binary());
+  const auto large_binary_array = ::arrow::ArrayFromJSON(::arrow::utf8(), json);
+  const auto large_wkb_array = ::arrow::ExtensionType::WrapArray(wkb_type, binary_array);
+
+  // When the original Arrow schema isn't stored and Arrow extensions are disabled,
+  // LogicalType::GEOMETRY is read as utf8.
+  auto writer_properties = ::parquet::ArrowWriterProperties::Builder()
+                               .write_geospatial_logical_types()
+                               ->build();
+  this->RoundTripSingleColumn(wkb_array, binary_array, writer_properties);
+  this->RoundTripSingleColumn(large_wkb_array, binary_array, writer_properties);
+
+  // When the original Arrow schema isn't stored and Arrow extensions are enabled,
+  // LogicalType::GEOMETRY is read as geoarrow.wkb with binary storage.
+  ::parquet::ArrowReaderProperties reader_properties;
+  reader_properties.set_arrow_extensions_enabled(true);
+  this->RoundTripSingleColumn(wkb_array, wkb_array, writer_properties, reader_properties);
+  this->RoundTripSingleColumn(large_wkb_array, wkb_array, writer_properties,
+                              reader_properties);
+
+  // When the original Arrow schema is stored, the stored Arrow type is respected.
+  writer_properties = ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
+  this->RoundTripSingleColumn(wkb_array, wkb_array, writer_properties);
+  this->RoundTripSingleColumn(large_wkb_array, large_wkb_array, writer_properties);
+}
+
 using TestNullParquetIO = TestParquetIO<::arrow::NullType>;
 
 TEST_F(TestNullParquetIO, NullColumn) {

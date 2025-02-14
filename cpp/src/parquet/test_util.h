@@ -30,6 +30,7 @@
 
 #include <gtest/gtest.h>
 
+#include "arrow/extension_type.h"
 #include "arrow/io/memory.h"
 #include "arrow/testing/util.h"
 #include "arrow/util/float16.h"
@@ -905,6 +906,43 @@ inline bool GetWKBPointCoordinate(const ByteArray& value, double* out_x, double*
   memcpy(out_x, &value.ptr[5], 8);
   memcpy(out_y, &value.ptr[13], 8);
   return true;
+}
+
+// A minimal version of a geoarrow.wkb extension type to test interoperability
+class GeoArrowWkbExtensionType : public ::arrow::ExtensionType {
+ public:
+  explicit GeoArrowWkbExtensionType(std::shared_ptr<::arrow::DataType> storage_type,
+                                    std::string metadata)
+      : ::arrow::ExtensionType(std::move(storage_type)), metadata_(std::move(metadata)) {}
+
+  std::string extension_name() const override { return "geoarrow.wkb"; }
+
+  std::string Serialize() const override { return metadata_; }
+
+  ::arrow::Result<std::shared_ptr<::arrow::DataType>> Deserialize(
+      std::shared_ptr<::arrow::DataType> storage_type,
+      const std::string& serialized_data) const override {
+    return std::make_shared<GeoArrowWkbExtensionType>(std::move(storage_type),
+                                                      serialized_data);
+  }
+
+  std::shared_ptr<::arrow::Array> MakeArray(
+      std::shared_ptr<::arrow::ArrayData> data) const override {
+    return std::make_shared<::arrow::ExtensionArray>(data);
+  }
+
+  bool ExtensionEquals(const ExtensionType& other) const override {
+    return other.extension_name() == extension_name() && other.Serialize() == Serialize();
+  }
+
+ private:
+  std::string metadata_;
+};
+
+inline std::shared_ptr<::arrow::DataType> geoarrow_wkb(
+    std::string metadata = "{}",
+    const std::shared_ptr<::arrow::DataType> storage = ::arrow::binary()) {
+  return std::make_shared<GeoArrowWkbExtensionType>(storage, std::move(metadata));
 }
 
 }  // namespace test

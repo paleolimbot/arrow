@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "arrow/array.h"
+#include "arrow/extension_type.h"
 #include "arrow/type.h"
 #include "arrow/util/bit_run_reader.h"
 #include "arrow/util/logging.h"
@@ -118,6 +119,11 @@ class GeospatialStatisticsImpl {
     }
 
     switch (values.type_id()) {
+      case ::arrow::Type::EXTENSION: {
+        const auto& extension_array = static_cast<const ::arrow::ExtensionArray&>(values);
+        Update(*extension_array.storage());
+        break;
+      }
       case ::arrow::Type::BINARY:
         UpdateArrayImpl<::arrow::BinaryArray>(values);
         break;
@@ -130,7 +136,8 @@ class GeospatialStatisticsImpl {
       // This does not currently handle run-end encoded or dictionary encodings
       default:
         throw ParquetException(
-            "Unsupported Array type in GeospatialStatistics::Update(Array)");
+            "Unsupported Array type in GeospatialStatistics::Update(Array): ",
+            values.type()->ToString());
     }
   }
 
