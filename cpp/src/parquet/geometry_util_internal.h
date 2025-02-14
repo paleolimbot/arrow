@@ -27,10 +27,13 @@
 
 namespace parquet::geometry {
 
+/// \brief Infinity, used to define bounds of empty bounding boxes
 constexpr double kInf = std::numeric_limits<double>::infinity();
 
+/// \brief Valid combinations of dimensions allowed by ISO well-known binary
 enum class Dimensions { XY = 0, XYZ = 1, XYM = 2, XYZM = 3, MIN = 0, MAX = 3 };
 
+/// \brief The supported set of geometry types allowed by ISO well-known binary
 enum class GeometryType {
   POINT = 1,
   LINESTRING = 2,
@@ -43,6 +46,8 @@ enum class GeometryType {
   MAX = 7
 };
 
+/// \brief A collection of intervals representing the encountered ranges of values
+/// in each dimension.
 struct BoundingBox {
   using XY = std::array<double, 2>;
   using XYZ = std::array<double, 3>;
@@ -118,6 +123,7 @@ inline bool operator==(const BoundingBox& lhs, const BoundingBox& rhs) {
 
 class WKBBuffer;
 
+/// \brief TODO: document class
 class WKBGeometryBounder {
  public:
   WKBGeometryBounder() = default;
