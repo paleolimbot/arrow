@@ -118,44 +118,19 @@ class GeospatialStatisticsImpl {
       return;
     }
 
+    // Note that ::arrow::Type::EXTENSION seems to be handled before this is called
     switch (values.type_id()) {
-      case ::arrow::Type::EXTENSION: {
-        const auto& extension_array = static_cast<const ::arrow::ExtensionArray&>(values);
-        Update(*extension_array.storage());
-        break;
-      }
       case ::arrow::Type::BINARY:
         UpdateArrayImpl<::arrow::BinaryArray>(values);
-        break;
-      case ::arrow::Type::BINARY_VIEW:
-        UpdateArrayImpl<::arrow::BinaryViewArray>(values);
         break;
       case ::arrow::Type::LARGE_BINARY:
         UpdateArrayImpl<::arrow::LargeBinaryArray>(values);
         break;
-      // This does not currently handle run-end encoded or dictionary encodings
+      // This does not currently handle run-end encoded, dictionary encodings, or views
       default:
         throw ParquetException(
             "Unsupported Array type in GeospatialStatistics::Update(Array): ",
             values.type()->ToString());
-    }
-  }
-
-  template <typename ArrayType>
-  void UpdateArrayImpl(const ::arrow::Array& values) {
-    const auto& binary_array = static_cast<const ArrayType&>(values);
-    geometry::WKBBuffer buf;
-    for (int64_t i = 0; i < binary_array.length(); ++i) {
-      if (!binary_array.IsNull(i)) {
-        std::string_view byte_array = binary_array.GetView(i);
-        buf.Init(reinterpret_cast<const uint8_t*>(byte_array.data()),
-                 byte_array.length());
-        ::arrow::Status status = bounder_.ReadGeometry(&buf);
-        if (!status.ok()) {
-          is_valid_ = false;
-          return;
-        }
-      }
     }
   }
 
@@ -219,6 +194,24 @@ class GeospatialStatisticsImpl {
  private:
   geometry::WKBGeometryBounder bounder_;
   bool is_valid_ = true;
+
+  template <typename ArrayType>
+  void UpdateArrayImpl(const ::arrow::Array& values) {
+    const auto& binary_array = static_cast<const ArrayType&>(values);
+    geometry::WKBBuffer buf;
+    for (int64_t i = 0; i < binary_array.length(); ++i) {
+      if (!binary_array.IsNull(i)) {
+        std::string_view byte_array = binary_array.GetView(i);
+        buf.Init(reinterpret_cast<const uint8_t*>(byte_array.data()),
+                 byte_array.length());
+        ::arrow::Status status = bounder_.ReadGeometry(&buf);
+        if (!status.ok()) {
+          is_valid_ = false;
+          return;
+        }
+      }
+    }
+  }
 };
 
 GeospatialStatistics::GeospatialStatistics()
