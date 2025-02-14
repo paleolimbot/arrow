@@ -32,7 +32,7 @@ namespace parquet::geometry {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
 
-enum class Dimensions { XY = 0, XYZ = 1, XYM = 2, XYZM = 3 };
+enum class Dimensions { XY = 0, XYZ = 1, XYM = 2, XYZM = 3, MIN = 0, MAX = 3 };
 
 enum class GeometryType {
   POINT = 1,
@@ -41,7 +41,9 @@ enum class GeometryType {
   MULTIPOINT = 4,
   MULTILINESTRING = 5,
   MULTIPOLYGON = 6,
-  GEOMETRYCOLLECTION = 7
+  GEOMETRYCOLLECTION = 7,
+  MIN = 1,
+  MAX = 7
 };
 
 struct BoundingBox {
@@ -313,11 +315,10 @@ class WKBGeometryBounder {
     uint32_t geometry_type_component = wkb_geometry_type % 1000;
     uint32_t dimensions_component = wkb_geometry_type / 1000;
 
-    auto min_geometry_type_value = static_cast<uint32_t>(GeometryType::POINT);
-    auto max_geometry_type_value =
-        static_cast<uint32_t>(GeometryType::GEOMETRYCOLLECTION);
-    auto min_dimension_value = static_cast<uint32_t>(Dimensions::XY);
-    auto max_dimension_value = static_cast<uint32_t>(Dimensions::XYZM);
+    auto min_geometry_type_value = static_cast<uint32_t>(GeometryType::MIN);
+    auto max_geometry_type_value = static_cast<uint32_t>(GeometryType::MAX);
+    auto min_dimension_value = static_cast<uint32_t>(Dimensions::MIN);
+    auto max_dimension_value = static_cast<uint32_t>(Dimensions::MAX);
 
     if (geometry_type_component < min_geometry_type_value ||
         geometry_type_component > max_geometry_type_value ||
