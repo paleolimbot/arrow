@@ -127,9 +127,8 @@ Result<std::string> MakeGeoArrowCrsMetadata(
       ARROW_ASSIGN_OR_RAISE(std::string projjson_value, metadata->Get(metadata_field));
       return R"("crs": )" + projjson_value + R"(, "crs_type": "projjson")";
     } else {
-      return Status::NotImplemented("Value of geospatial type crs member was '", crs,
-                                    "' but metadata key '", metadata_field,
-                                    "' does not exist in file metadata");
+      // Pass on the value of the field so the user can sort this out if needed
+      return R"("crs": )" + metadata_field + R"(, "crs_type": "projjson")";
     }
   } else {
     return Status::Invalid("Can't convert invalid Parquet CRS string to GeoArrow: ", crs);

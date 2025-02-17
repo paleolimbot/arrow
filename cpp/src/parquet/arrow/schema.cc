@@ -292,11 +292,11 @@ Result<std::string> GeospatialGeoArrowCrsToParquetCrs(
     }
 
     // TODO(paleolimbot) this is not quite correct because we're supposed to put this
-    // in the metadata according to the spec. We need to find a way to put
-    // this in the arrow_properties/file metadata via a CrsProvider or something.
+    // in the metadata according to the spec. I can't find a good way to get a mutable
+    // reference to the global metadata here yet.
     rj::StringBuffer buffer;
     rj::Writer<rj::StringBuffer> writer(buffer);
-    document.Accept(writer);
+    json_crs.Accept(writer);
     return std::string("projjson:") + buffer.GetString();
   } else {
     // e.g., authority:code, WKT2, arbitrary string. A pluggable CrsProvider
