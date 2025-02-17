@@ -131,7 +131,7 @@ class WKBBuffer;
 
 /// \brief Accumulate a BoundingBox and geometry types based on zero or more well-known
 /// binary blobs
-class WKBGeometryBounder {
+class PARQUET_EXPORT WKBGeometryBounder {
  public:
   WKBGeometryBounder() = default;
   WKBGeometryBounder(const WKBGeometryBounder&) = default;
