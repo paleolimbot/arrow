@@ -39,7 +39,7 @@ class WKBBuffer {
   ::arrow::Result<uint32_t> ReadUInt32(bool swap) {
     ARROW_ASSIGN_OR_RAISE(auto value, ReadChecked<uint32_t>());
     if (ARROW_PREDICT_FALSE(swap)) {
-      return value = ByteSwap(value);
+      return ByteSwap(value);
     } else {
       return value;
     }

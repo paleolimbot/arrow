@@ -60,10 +60,13 @@ struct BoundingBox {
   BoundingBox(const BoundingBox& other) = default;
   BoundingBox& operator=(const BoundingBox&) = default;
 
+  /// \brief Update the X and Y bounds to ensure these bounds contain coord
   void UpdateXY(const XY& coord) { UpdateInternal(coord); }
 
+  /// \brief Update the X, Y, and Z bounds to ensure these bounds contain coord
   void UpdateXYZ(const XYZ& coord) { UpdateInternal(coord); }
 
+  /// \brief Update the X, Y, and M bounds to ensure these bounds contain coord
   void UpdateXYM(const XYM& coord) {
     min[0] = std::min(min[0], coord[0]);
     min[1] = std::min(min[1], coord[1]);
@@ -73,8 +76,10 @@ struct BoundingBox {
     max[3] = std::max(max[3], coord[2]);
   }
 
+  /// \brief Update the X, Y, Z, and M bounds to ensure these bounds contain coord
   void UpdateXYZM(const XYZM& coord) { UpdateInternal(coord); }
 
+  /// \brief Reset these bounds to an empty state such that they contain no coordinates
   void Reset() {
     for (int i = 0; i < 4; i++) {
       min[i] = kInf;
@@ -82,6 +87,7 @@ struct BoundingBox {
     }
   }
 
+  /// \brief Update these bounds such they also contain other
   void Merge(const BoundingBox& other) {
     for (int i = 0; i < 4; i++) {
       min[i] = std::min(min[i], other.min[i]);
@@ -123,28 +129,43 @@ inline bool operator==(const BoundingBox& lhs, const BoundingBox& rhs) {
 
 class WKBBuffer;
 
-/// \brief TODO: document class
+/// \brief Accumulate a BoundingBox and geometry types based on zero or more well-known
+/// binary blobs
 class WKBGeometryBounder {
  public:
   WKBGeometryBounder() = default;
   WKBGeometryBounder(const WKBGeometryBounder&) = default;
 
+  /// \brief Accumulate the bounds of a serialized well-known binary geometry
+  ///
+  /// Returns SerializationError for any parse errors encountered. Bounds for
+  /// any encountered coordinates are accumulated and the geometry type of
+  /// the geometry is added to the internal geometry type list.
+  ///
+  /// Note that this method is NOT appropriate for bounding a GEOGRAPHY,
+  /// whose bounds are not a function purely of the vertices. Geography bounding
+  /// is not yet implemented.
   ::arrow::Status ReadGeometry(const uint8_t* data, int64_t size);
 
+  /// \brief Accumulate the bounds of a previously-calculated BoundingBox
   void ReadBox(const BoundingBox& box) { box_.Merge(box); }
 
+  /// \brief Accumulate a previously-calculated list of geometry types
   void ReadGeometryTypes(const std::vector<int32_t>& geospatial_types) {
     geospatial_types_.insert(geospatial_types.begin(), geospatial_types.end());
   }
 
+  /// \brief Retrieve the accumulated bounds
   const BoundingBox& Bounds() const { return box_; }
 
+  /// \brief Retrieve the accumulated geometry types
   std::vector<int32_t> GeometryTypes() const {
     std::vector<int32_t> out(geospatial_types_.begin(), geospatial_types_.end());
     std::sort(out.begin(), out.end());
     return out;
   }
 
+  /// \brief Reset the internal bounds and geometry types list to an empty state
   void Reset() {
     box_.Reset();
     geospatial_types_.clear();
