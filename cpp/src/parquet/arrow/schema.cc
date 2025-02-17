@@ -562,6 +562,7 @@ struct SchemaTreeContext {
   SchemaManifest* manifest;
   ArrowReaderProperties properties;
   const SchemaDescriptor* schema;
+  std::shared_ptr<const KeyValueMetadata> metadata;
 
   void LinkParent(const SchemaField* child, const SchemaField* parent) {
     manifest->child_to_parent[child] = parent;
@@ -584,7 +585,7 @@ bool IsDictionaryReadSupported(const ArrowType& type) {
     int column_index, const schema::PrimitiveNode& primitive_node,
     SchemaTreeContext* ctx) {
   ARROW_ASSIGN_OR_RAISE(std::shared_ptr<ArrowType> storage_type,
-                        GetArrowType(primitive_node, ctx->properties));
+                        GetArrowType(primitive_node, ctx->properties, ctx->metadata));
   if (ctx->properties.read_dictionary(column_index) &&
       IsDictionaryReadSupported(*storage_type)) {
     return ::arrow::dictionary(::arrow::int32(), storage_type);
@@ -1249,6 +1250,7 @@ Status SchemaManifest::Make(const SchemaDescriptor* schema,
   ctx.manifest = manifest;
   ctx.properties = properties;
   ctx.schema = schema;
+  ctx.metadata = metadata;
   const GroupNode& schema_node = *schema->group_node();
   manifest->descr = schema;
   manifest->schema_fields.resize(schema_node.field_count());
