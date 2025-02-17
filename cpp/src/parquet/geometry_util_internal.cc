@@ -24,6 +24,14 @@
 
 namespace parquet::geometry {
 
+/// \brief Object to keep track of the low-level consumption of a well-known binary
+/// geometry
+///
+/// Briefly, ISO well-known binary supported by the Parquet spec is an endian byte
+/// (0x01 or 0x00), followed by geometry type + dimensions encoded as a (uint32_t),
+/// followed by geometry-specific data. Coordinate sequences are represented by a
+/// uint32_t (the number of coordinates) plus a sequence of doubles (number of coordinates
+/// multiplied by the number of dimensions).
 class WKBBuffer {
  public:
   WKBBuffer() : data_(NULLPTR), size_(0) {}
