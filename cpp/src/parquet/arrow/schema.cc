@@ -291,13 +291,20 @@ Result<std::string> GeospatialGeoArrowCrsToParquetCrs(
       }
     }
 
-    // TODO(paleolimbot) this is not quite correct because we're supposed to put this
-    // in the metadata according to the spec. I can't find a good way to get a mutable
-    // reference to the global metadata here yet.
+    // TODO(paleolimbot) not sure if the arrow_properties are the right place to put
+    // the pointer to this mutable state that can accumulate Crses from type conversions
     rj::StringBuffer buffer;
     rj::Writer<rj::StringBuffer> writer(buffer);
     json_crs.Accept(writer);
-    return std::string("projjson:") + buffer.GetString();
+    if (arrow_properties.geospatial_crs_context()) {
+      std::string field_name = arrow_properties.geospatial_crs_context()->PutCrs(
+          "projjson", buffer.GetString());
+      return std::string("projjson:") + field_name;
+    } else {
+      // TODO(paleolimbot): If a CRS context was not provided, just write its definition?
+      // Alternatively, throw?
+      return std::string("projjson:") + buffer.GetString();
+    }
   } else {
     // e.g., authority:code, WKT2, arbitrary string. A pluggable CrsProvider
     // could handle these and return something we're allowed to write here.

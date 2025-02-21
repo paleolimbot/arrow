@@ -26,6 +26,7 @@
 #include "arrow/io/caching.h"
 #include "arrow/type.h"
 #include "arrow/util/compression.h"
+#include "arrow/util/key_value_metadata.h"
 #include "arrow/util/type_fwd.h"
 #include "parquet/encryption/encryption.h"
 #include "parquet/exception.h"
@@ -1022,6 +1023,40 @@ class PARQUET_EXPORT ArrowReaderProperties {
 PARQUET_EXPORT
 ArrowReaderProperties default_arrow_reader_properties();
 
+// TODO(paleolimbot): This is required to write example files that correctly set
+// an input type with a PROJJSON CRS as crs=projjson:some_field_name and add
+// the actual definition to the global metadata. I am not sure if this is the
+// best final way to do this but there is some precedent for a pointer to mutable
+// state in the WriterProperties with the MemoryPool and Executor.
+class GeospatialCrsContext {
+ public:
+  GeospatialCrsContext()
+      : projjson_crs_fields_(::arrow::KeyValueMetadata::Make({}, {})) {}
+
+  std::string PutCrs(std::string crs_encoding, std::string crs_value) {
+    if (crs_encoding == "srid") {
+      return crs_encoding + ":" + crs_value;
+    } else if (crs_encoding == "projjson") {
+      std::string key =
+          "PARQUET:projjon_crs_value_" + std::to_string(projjson_crs_fields_->size());
+      projjson_crs_fields_->Append(key, crs_value);
+      return "projjson:" + key;
+    } else {
+      throw ParquetException("Crs encoding '", crs_encoding,
+                             "' is not suppored by GeospatialCrsContext");
+    }
+  }
+
+  bool HasProjjsonCrsFields() { return projjson_crs_fields_->size() > 0; }
+
+  std::shared_ptr<::arrow::KeyValueMetadata> FinishProjjsonCrsFields() {
+    return projjson_crs_fields_->Copy();
+  }
+
+ private:
+  std::shared_ptr<::arrow::KeyValueMetadata> projjson_crs_fields_;
+};
+
 class PARQUET_EXPORT ArrowWriterProperties {
  public:
   enum EngineVersion {
@@ -1039,8 +1074,23 @@ class PARQUET_EXPORT ArrowWriterProperties {
           compliant_nested_types_(true),
           engine_version_(V2),
           write_geospatial_logical_types_(false),
+          geospatial_crs_context_(NULLPTR),
           use_threads_(kArrowDefaultUseThreads),
           executor_(NULLPTR) {}
+
+    explicit Builder(const ArrowWriterProperties& properties)
+        : write_timestamps_as_int96_(properties.write_timestamps_as_int96_),
+          coerce_timestamps_enabled_(properties.coerce_timestamps_enabled()),
+          coerce_timestamps_unit_(properties.coerce_timestamps_unit()),
+          truncated_timestamps_allowed_(properties.truncated_timestamps_allowed()),
+          store_schema_(properties.store_schema()),
+          compliant_nested_types_(properties.compliant_nested_types()),
+          engine_version_(properties.engine_version()),
+          write_geospatial_logical_types_(properties.write_geospatial_logical_types()),
+          geospatial_crs_context_(properties.geospatial_crs_context()),
+          use_threads_(properties.use_threads()),
+          executor_(properties.executor()) {}
+
     virtual ~Builder() = default;
 
     /// \brief Disable writing legacy int96 timestamps (default disabled).
@@ -1119,6 +1169,11 @@ class PARQUET_EXPORT ArrowWriterProperties {
       return this;
     }
 
+    Builder* set_geospatial_crs_context(GeospatialCrsContext* geospatial_crs_context) {
+      geospatial_crs_context_ = geospatial_crs_context;
+      return this;
+    }
+
     /// \brief Set whether to use multiple threads to write columns
     /// in parallel in the buffered row group mode.
     ///
@@ -1146,7 +1201,8 @@ class PARQUET_EXPORT ArrowWriterProperties {
       return std::shared_ptr<ArrowWriterProperties>(new ArrowWriterProperties(
           write_timestamps_as_int96_, coerce_timestamps_enabled_, coerce_timestamps_unit_,
           truncated_timestamps_allowed_, store_schema_, compliant_nested_types_,
-          engine_version_, write_geospatial_logical_types_, use_threads_, executor_));
+          engine_version_, write_geospatial_logical_types_, geospatial_crs_context_,
+          use_threads_, executor_));
     }
 
    private:
@@ -1160,6 +1216,7 @@ class PARQUET_EXPORT ArrowWriterProperties {
     bool compliant_nested_types_;
     EngineVersion engine_version_;
     bool write_geospatial_logical_types_;
+    GeospatialCrsContext* geospatial_crs_context_;
 
     bool use_threads_;
     ::arrow::internal::Executor* executor_;
@@ -1192,6 +1249,8 @@ class PARQUET_EXPORT ArrowWriterProperties {
   /// \brief Write GEOMETRY and/or GEOGRAPHY logical types when converting GeoArrow types
   bool write_geospatial_logical_types() const { return write_geospatial_logical_types_; }
 
+  GeospatialCrsContext* geospatial_crs_context() const { return geospatial_crs_context_; }
+
   /// \brief Returns whether the writer will use multiple threads
   /// to write columns in parallel in the buffered row group mode.
   bool use_threads() const { return use_threads_; }
@@ -1200,14 +1259,12 @@ class PARQUET_EXPORT ArrowWriterProperties {
   ::arrow::internal::Executor* executor() const;
 
  private:
-  explicit ArrowWriterProperties(bool write_nanos_as_int96,
-                                 bool coerce_timestamps_enabled,
-                                 ::arrow::TimeUnit::type coerce_timestamps_unit,
-                                 bool truncated_timestamps_allowed, bool store_schema,
-                                 bool compliant_nested_types,
-                                 EngineVersion engine_version,
-                                 bool write_geospataial_logical_types, bool use_threads,
-                                 ::arrow::internal::Executor* executor)
+  explicit ArrowWriterProperties(
+      bool write_nanos_as_int96, bool coerce_timestamps_enabled,
+      ::arrow::TimeUnit::type coerce_timestamps_unit, bool truncated_timestamps_allowed,
+      bool store_schema, bool compliant_nested_types, EngineVersion engine_version,
+      bool write_geospataial_logical_types, GeospatialCrsContext* geospatial_crs_context,
+      bool use_threads, ::arrow::internal::Executor* executor)
       : write_timestamps_as_int96_(write_nanos_as_int96),
         coerce_timestamps_enabled_(coerce_timestamps_enabled),
         coerce_timestamps_unit_(coerce_timestamps_unit),
@@ -1216,6 +1273,7 @@ class PARQUET_EXPORT ArrowWriterProperties {
         compliant_nested_types_(compliant_nested_types),
         engine_version_(engine_version),
         write_geospatial_logical_types_(write_geospataial_logical_types),
+        geospatial_crs_context_(geospatial_crs_context),
         use_threads_(use_threads),
         executor_(executor) {}
 
@@ -1227,6 +1285,7 @@ class PARQUET_EXPORT ArrowWriterProperties {
   const bool compliant_nested_types_;
   const EngineVersion engine_version_;
   const bool write_geospatial_logical_types_;
+  GeospatialCrsContext* geospatial_crs_context_;
   const bool use_threads_;
   ::arrow::internal::Executor* executor_;
 };

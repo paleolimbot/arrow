@@ -526,8 +526,19 @@ Status FileWriter::Make(::arrow::MemoryPool* pool,
 Status GetSchemaMetadata(const ::arrow::Schema& schema, ::arrow::MemoryPool* pool,
                          const ArrowWriterProperties& properties,
                          std::shared_ptr<const KeyValueMetadata>* out) {
-  if (!properties.store_schema()) {
+  if (!properties.store_schema() && !properties.geospatial_crs_context()) {
     *out = nullptr;
+    return Status::OK();
+  }
+
+  std::shared_ptr<KeyValueMetadata> projjson_crs_fields;
+  if (properties.geospatial_crs_context() &&
+      properties.geospatial_crs_context()->HasProjjsonCrsFields()) {
+    projjson_crs_fields = properties.geospatial_crs_context()->FinishProjjsonCrsFields();
+  }
+
+  if (!properties.store_schema()) {
+    *out = std::move(projjson_crs_fields);
     return Status::OK();
   }
 
@@ -546,6 +557,14 @@ Status GetSchemaMetadata(const ::arrow::Schema& schema, ::arrow::MemoryPool* poo
   std::string schema_as_string = serialized->ToString();
   std::string schema_base64 = ::arrow::util::base64_encode(schema_as_string);
   result->Append(kArrowSchemaKey, std::move(schema_base64));
+
+  // Append any projjson CRS fields to the end of the metadata if there were any
+  if (projjson_crs_fields) {
+    for (int64_t i = 0; i < projjson_crs_fields->size(); i++) {
+      result->Append(projjson_crs_fields->key(i), projjson_crs_fields->value(i));
+    }
+  }
+
   *out = std::move(result);
   return Status::OK();
 }
@@ -556,6 +575,14 @@ Result<std::unique_ptr<FileWriter>> FileWriter::Open(
     std::shared_ptr<WriterProperties> properties,
     std::shared_ptr<ArrowWriterProperties> arrow_properties) {
   std::shared_ptr<SchemaDescriptor> parquet_schema;
+
+  GeospatialCrsContext default_crs_context;
+  if (!arrow_properties->geospatial_crs_context()) {
+    arrow_properties = ArrowWriterProperties::Builder(*arrow_properties)
+                           .set_geospatial_crs_context(&default_crs_context)
+                           ->build();
+  }
+
   RETURN_NOT_OK(
       ToParquetSchema(&schema, *properties, *arrow_properties, &parquet_schema));
 
