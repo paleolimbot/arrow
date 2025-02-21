@@ -297,9 +297,8 @@ Result<std::string> GeospatialGeoArrowCrsToParquetCrs(
     rj::Writer<rj::StringBuffer> writer(buffer);
     json_crs.Accept(writer);
     if (arrow_properties.geospatial_crs_context()) {
-      std::string field_name = arrow_properties.geospatial_crs_context()->PutCrs(
-          "projjson", buffer.GetString());
-      return std::string("projjson:") + field_name;
+      return arrow_properties.geospatial_crs_context()->PutCrs("projjson",
+                                                               buffer.GetString());
     } else {
       // TODO(paleolimbot): If a CRS context was not provided, just write its definition?
       // Alternatively, throw?

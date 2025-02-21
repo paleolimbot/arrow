@@ -1038,7 +1038,7 @@ class GeospatialCrsContext {
       return crs_encoding + ":" + crs_value;
     } else if (crs_encoding == "projjson") {
       std::string key =
-          "PARQUET:projjon_crs_value_" + std::to_string(projjson_crs_fields_->size());
+          "projjson_crs_value_" + std::to_string(projjson_crs_fields_->size());
       projjson_crs_fields_->Append(key, crs_value);
       return "projjson:" + key;
     } else {

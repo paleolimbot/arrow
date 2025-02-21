@@ -122,7 +122,8 @@ Result<std::string> MakeGeoArrowCrsMetadata(
   } else if (crs.rfind(srid_prefix, 0) == 0) {
     return R"("crs": ")" + crs.substr(srid_prefix.size()) + R"(", "crs_type": "srid")";
   } else if (crs.rfind(projjson_prefix, 0) == 0) {
-    std::string metadata_field = crs.substr(projjson_prefix.size());
+    std::string metadata_field =
+        crs.substr(projjson_prefix.size(), projjson_prefix.size());
     if (metadata && metadata->Contains(metadata_field)) {
       ARROW_ASSIGN_OR_RAISE(std::string projjson_value, metadata->Get(metadata_field));
       return R"("crs": )" + projjson_value + R"(, "crs_type": "projjson")";

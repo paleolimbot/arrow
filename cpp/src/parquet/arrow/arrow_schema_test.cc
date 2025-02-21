@@ -1331,27 +1331,43 @@ TEST_F(TestConvertArrowSchema, ParquetGeoArrowCrsProjjson) {
   // will have their CRS expressed in this way.
   ::arrow::ExtensionTypeGuard guard(test::geoarrow_wkb());
 
+  GeospatialCrsContext crs_context;
+
   ArrowWriterProperties::Builder builder;
   builder.write_geospatial_logical_types();
-  auto arrow_properties = builder.build();
+  auto arrow_properties = builder.set_geospatial_crs_context(&crs_context)->build();
 
   std::vector<NodePtr> parquet_fields;
-  parquet_fields.push_back(PrimitiveNode::Make("geometry", Repetition::OPTIONAL,
-                                               LogicalType::Geometry("projjson:{}"),
-                                               ParquetType::BYTE_ARRAY));
-  parquet_fields.push_back(PrimitiveNode::Make("geography", Repetition::OPTIONAL,
-                                               LogicalType::Geography("projjson:{}"),
-                                               ParquetType::BYTE_ARRAY));
+  parquet_fields.push_back(
+      PrimitiveNode::Make("geometry", Repetition::OPTIONAL,
+                          LogicalType::Geometry(R"(projjson:projjson_crs_value_0)"),
+                          ParquetType::BYTE_ARRAY));
+  parquet_fields.push_back(
+      PrimitiveNode::Make("geography", Repetition::OPTIONAL,
+                          LogicalType::Geography(R"(projjson:projjson_crs_value_1)"),
+                          ParquetType::BYTE_ARRAY));
 
   std::vector<std::shared_ptr<Field>> arrow_fields = {
-      ::arrow::field("geometry",
-                     test::geoarrow_wkb(R"({"crs": {}, "crs_type": "projjson"})"), true),
-      ::arrow::field("geography",
-                     test::geoarrow_wkb(
-                         R"({"crs": {}, "crs_type": "projjson", "edges": "spherical"})"),
-                     true)};
+      ::arrow::field(
+          "geometry",
+          test::geoarrow_wkb(R"({"crs": {"key0":"value0"}, "crs_type": "projjson"})"),
+          true),
+      ::arrow::field(
+          "geography",
+          test::geoarrow_wkb(
+              R"({"crs": {"key1":"value1"}, "crs_type": "projjson", "edges": "spherical"})"),
+          true)};
 
   ASSERT_OK(ConvertSchema(arrow_fields, arrow_properties));
+
+  std::shared_ptr<::arrow::KeyValueMetadata> crs_metadata =
+      crs_context.FinishProjjsonCrsFields();
+  ASSERT_EQ(crs_metadata->size(), 2);
+  ASSERT_TRUE(crs_metadata->Contains("projjson_crs_value_0"));
+  ASSERT_TRUE(crs_metadata->Contains("projjson_crs_value_1"));
+  ASSERT_EQ(*crs_metadata->Get("projjson_crs_value_0"), R"({"key0":"value0"})");
+  ASSERT_EQ(*crs_metadata->Get("projjson_crs_value_1"), R"({"key1":"value1"})");
+
   ASSERT_NO_FATAL_FAILURE(CheckFlatSchema(parquet_fields));
 }
 
